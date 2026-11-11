@@ -1,0 +1,24 @@
+name: Proposer une idée
+description: Une amélioration ou une nouvelle fonction pour PSN Amis.
+title: "[Idée] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: besoin
+    attributes:
+      label: De quoi as-tu besoin ?
+      description: Le problème que tu rencontres, ou ce qui te manque.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Ce que tu imagines
+      description: Comment PSN Amis pourrait t'aider.
+    validations:
+      required: true
+  - type: textarea
+    id: autres
+    attributes:
+      label: Autres pistes (facultatif)
+      description: D'autres solutions auxquelles tu as pensé.

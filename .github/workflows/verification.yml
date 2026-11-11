@@ -1,0 +1,82 @@
+# Vérifie chaque envoi et chaque demande de fusion : style, version, tests, documents, workflows.
+name: Vérification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Style, version et tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+
+      - name: Installer Python et les bibliothèques (versions figées)
+        run: uv sync --locked
+
+      - name: Vérifier le code (Ruff)
+        run: uv run ruff check .
+
+      - name: Vérifier la mise en forme (Ruff)
+        run: uv run ruff format --check .
+
+      - name: Vérifier la version (moteur.py, pyproject.toml, CHANGELOG.md)
+        run: uv run outils/verifier_version.py
+
+      - name: Lancer les tests
+        run: uv run pytest
+
+      - name: Dessiner les captures d'écran (données de démonstration)
+        run: uv run outils/captures.py --sortie "$env:RUNNER_TEMP/captures"
+
+  dependances:
+    name: Relecture des dépendances
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Relire les changements de dépendances
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+
+  documents:
+    name: Documents et workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Relire les documents (markdownlint)
+        uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
+        with:
+          globs: "**/*.md"
+
+      - name: Relire les workflows (actionlint)
+        run: |
+          curl -sSfL -o actionlint.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz" | sha256sum --check
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint -color

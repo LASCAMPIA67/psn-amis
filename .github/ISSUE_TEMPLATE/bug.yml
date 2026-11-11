@@ -1,0 +1,64 @@
+name: Signaler un problème
+description: Quelque chose ne marche pas comme prévu.
+title: "[Problème] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler un problème !
+        Avant d'envoyer, jette un œil à la partie « Dépannage » du README : la solution y est peut-être.
+        **N'écris jamais ton code npsso**, ni d'information personnelle (pseudos d'autres joueurs, chemins de ton PC…).
+  - type: input
+    id: version
+    attributes:
+      label: Version de PSN Amis
+      description: Elle est écrite en haut du tableau de bord, à côté de « PSN AMIS ».
+      placeholder: "2.2.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Version de Windows
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: dropdown
+    id: console
+    attributes:
+      label: La fenêtre s'ouvre dans…
+      options:
+        - Windows Terminal (onglets, fenêtre moderne)
+        - L'ancienne console de Windows (fenêtre noire, sans onglets)
+        - Je ne sais pas
+    validations:
+      required: true
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Que se passe-t-il ?
+      description: Ce que tu vois, et ce que tu attendais à la place.
+    validations:
+      required: true
+  - type: textarea
+    id: etapes
+    attributes:
+      label: Comment le refaire ?
+      description: Les étapes, dans l'ordre, pour voir le problème.
+      placeholder: |
+        1. Lancer PSN Amis
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: journal
+    attributes:
+      label: Lignes de journal.txt (facultatif)
+      description: Les lignes autour du problème (touche J pour ouvrir le journal). Relis-les avant de les coller.
+      render: text
+  - type: textarea
+    id: captures
+    attributes:
+      label: Captures d'écran (facultatif)
+      description: Une capture du tableau de bord aide beaucoup. Cache ce qui est personnel.

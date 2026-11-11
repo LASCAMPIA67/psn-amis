@@ -1,0 +1,28 @@
+# Garde à jour les actions GitHub des workflows (figées par empreinte de commit)
+# et les bibliothèques Python (uv.lock). Les mises à jour attendent 14 jours après
+# leur sortie, le temps que les éventuels problèmes soient connus.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 14
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: build

@@ -1,0 +1,54 @@
+# Publie une version quand une étiquette vX.Y.Z est envoyée : vérifie, teste, publie.
+name: Publication
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    name: Publier la version
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # créer la publication
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+
+      - name: Installer Python et les bibliothèques (versions figées)
+        run: uv sync --locked
+
+      - name: Vérifier que la version du code est celle de l'étiquette
+        run: uv run outils/verifier_version.py --etiquette "$env:GITHUB_REF_NAME"
+
+      - name: Vérifier le code (Ruff)
+        run: uv run ruff check .
+
+      - name: Lancer les tests
+        run: uv run pytest
+
+      - name: Préparer les notes de version (depuis CHANGELOG.md)
+        run: uv run outils/notes_version.py "$env:GITHUB_REF_NAME" --sortie notes.md
+
+      - name: Publier sur GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY `
+            --title "PSN Amis $version" --notes-file notes.md --verify-tag
