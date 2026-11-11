@@ -553,8 +553,8 @@ def panneau_npsso(instant: Instantane) -> Panel:
         Text(moteur.ETAPES_CODE_NPSSO, style="titre"),
         Text(""),
         Text(
-            "Attention : ne le faites pas pendant un live, le code serait visible à "
-            "l'écran. Le script reprend tout seul dès que le code est enregistré.",
+            "Attention : si votre écran est partagé ou enregistré, le code y serait "
+            "visible. Le script reprend tout seul dès que le code est enregistré.",
             style="info",
         ),
     )

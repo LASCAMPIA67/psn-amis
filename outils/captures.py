@@ -29,9 +29,9 @@ import tableau_de_bord as tb  # noqa: E402
 MAINTENANT = datetime(2026, 11, 11, 21, 4, 33)
 COMPTE = "MonCompte-PSN"
 PSEUDOS = [
-    "NightOwl-BO2",
+    "NightOwl-77",
     "Kyra_Sniper",
-    "xX_Lobby_Xx",
+    "xX_Pixel_Xx",
     "Tomahawk-77",
     "Lyna-Gamer",
     "ZedRush_",

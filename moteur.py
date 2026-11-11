@@ -99,7 +99,7 @@ AIDE_NPSSO = f"""Pour mettre un nouveau code npsso :
   4. Dans PSN Amis, appuyez sur C, puis collez le code (Ctrl+V) et validez avec Entrée.
      Sans le tableau de bord : « accepter_amis.py --configurer », ou mettez le code
      dans npsso.txt avec le Bloc-notes (dossier {DOSSIER}).
-  Attention : ne le faites pas pendant un live, le code serait visible à l'écran."""
+  Attention : si votre écran est partagé ou enregistré, le code y serait visible."""
 
 # ─── Journal (journal.txt + écran), avec masquage du code npsso ───────────────
 journal = logging.getLogger("psn_amis")
@@ -218,7 +218,7 @@ def verrouiller_instance() -> IO[str] | None:
 
 
 def baisser_priorite() -> None:
-    """Laisse la priorité à Black Ops 2, OBS et TikTok LIVE Studio."""
+    """Laisse la priorité aux autres programmes (jeu, capture vidéo, navigateur...)."""
     if os.name != "nt":
         return
     below_normal_priority_class = 0x00004000
