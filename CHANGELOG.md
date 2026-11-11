@@ -6,6 +6,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le p
 
 ## [Non publié]
 
+## [2.3.1] - 2026-11-11
+
+### Corrigé
+
+- Le lanceur s'arrêtait quand une bibliothèque de développement (Ruff ouvert par Visual Studio Code, par exemple) ne pouvait pas être retirée pendant la mise à jour. Il n'enlève plus rien, et si la mise à jour est impossible sur le moment, il démarre avec les bibliothèques déjà installées.
+
 ## [2.3.0] - 2026-11-11
 
 ### Ajouté
@@ -81,6 +87,7 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
 - Une seule instance à la fois, grâce à un fichier verrou.
 
-[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.0...HEAD
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.1...HEAD
+[2.3.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/LASCAMPIA67/psn-amis/releases/tag/v2.2.0
