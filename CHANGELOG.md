@@ -6,6 +6,18 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le p
 
 ## [Non publié]
 
+## [2.3.0] - 2026-11-11
+
+### Ajouté
+
+- Dans le panneau Activité, les messages des jours précédents sont datés (« 10/11 23:59 »), pour un tableau de bord qui reste ouvert plusieurs jours.
+
+### Modifié
+
+- Le lanceur met à jour Python et les bibliothèques à chaque démarrage quand uv est présent (un instant si rien n'a changé) : après une mise à jour de PSN Amis, il suffit de relancer.
+- Pendant la saisie d'un code npsso (touche <kbd>C</kbd>), la console retrouve son réglage normal : le collage par clic droit fonctionne aussi, et <kbd>Ctrl</kbd> + <kbd>C</kbd> annule la saisie.
+- Les textes du programme et la présentation parlent de l'outil lui-même, sans supposer un usage particulier.
+
 ## [2.2.0] - 2026-11-11
 
 Première version publiée sur GitHub. Le compte connecté est celui dont vient le code npsso : n'importe qui peut utiliser PSN Amis avec son propre compte PlayStation.
@@ -57,7 +69,7 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Vérification toutes les 15 secondes, au lieu de 60.
 - Le code est découpé en trois fichiers : `moteur.py` (Sony et acceptations), `tableau_de_bord.py` (affichage), `accepter_amis.py` (démarrage).
 - Le projet est géré avec uv (`pyproject.toml`, `uv.lock`) et tourne sous Python 3.15 ; le code est vérifié par Ruff.
-- Le processus tourne en priorité basse : le jeu, OBS et le logiciel de live passent avant.
+- Le processus tourne en priorité basse : les autres programmes passent avant.
 
 ## [1.0.0] - 2026-11-10
 
@@ -69,5 +81,6 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
 - Une seule instance à la fois, grâce à un fichier verrou.
 
-[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.2.0...HEAD
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/LASCAMPIA67/psn-amis/releases/tag/v2.2.0

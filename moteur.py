@@ -49,7 +49,7 @@ from psnawp_api.utils import API_PATH, BASE_PATH
 from requests.adapters import HTTPAdapter
 
 # Version du programme (la même que dans pyproject.toml et CHANGELOG.md).
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 
 # ─── Réglages ─────────────────────────────────────────────────────────────────
 # Secondes entre deux vérifications. À chaque fois : demandes reçues acceptées, puis
