@@ -1,6 +1,6 @@
 # PSN Amis
 
-**Accepte à ta place les demandes d'amis PlayStation Network, et te montre tout dans une console en couleur.** Fait pour les lives où les joueurs doivent t'ajouter en ami pour rejoindre ta partie.
+**Accepte à ta place les demandes d'amis PlayStation Network, et te montre tout dans une console en couleur.**
 
 [![Vérification](https://github.com/LASCAMPIA67/psn-amis/actions/workflows/verification.yml/badge.svg)](https://github.com/LASCAMPIA67/psn-amis/actions/workflows/verification.yml)
 [![Dernière version](https://img.shields.io/github/v/release/LASCAMPIA67/psn-amis?label=version)](https://github.com/LASCAMPIA67/psn-amis/releases/latest)
@@ -31,14 +31,14 @@
 
 ## Ce que fait PSN Amis
 
-Quand tu organises des parties sur PlayStation pendant un live (des lobbies Black Ops 2 sur TikTok, par exemple), les joueurs doivent **t'ajouter en ami** pour rejoindre ta partie. À la main, c'est accepter des demandes toute la soirée, entre deux parties. PSN Amis s'en charge, et te laisse jouer :
+Dès que quelqu'un t'envoie une demande d'ami sur PlayStation Network, PSN Amis l'accepte pour toi, en quelques secondes, sans que tu aies à ouvrir la console ou l'appli PS App. Il tourne dans une fenêtre sur ton PC, que tu laisses ouverte aussi longtemps que tu veux, et il te montre ce qu'il fait :
 
 - **Il accepte les demandes d'amis reçues**, toutes les 15 secondes, une par une, avec une petite pause entre chaque.
 - **Il te montre tout en direct** dans une console en couleur : le statut, les ajouts du jour en gros chiffres, les ajouts depuis le lancement, le nombre d'amis avec une jauge sur 2 000, les derniers ajouts avec l'heure, et un fil d'activité.
 - **Il recompte tes amis** auprès de Sony à chaque vérification, et note chaque ami qui n'y est plus (« ▼ Ami retiré »).
 - **Il écrit tout dans `journal.txt`**, avec la date et l'heure : tu peux retrouver qui a été ajouté, et quand.
 - **Il ne s'arrête jamais tout seul.** Coupure Internet, serveurs Sony en panne, code expiré, liste d'amis pleine… il explique ce qui se passe, attend, et réessaie.
-- **Il reste léger** : priorité basse, deux requêtes toutes les 15 secondes. Ton jeu, OBS et ton logiciel de live passent avant lui.
+- **Il reste léger** : priorité basse, deux requêtes toutes les 15 secondes. Les autres programmes passent avant lui.
 - **Il s'adapte à la fenêtre** : grand écran, fenêtre réduite ou zoom (<kbd>Ctrl</kbd> + molette), l'affichage se réorganise et les messages restent entiers.
 
 Et ce qu'il ne fait **jamais** : retirer un ami, accepter une demande de partage du vrai nom, envoyer quoi que ce soit ailleurs que chez Sony, ou afficher ton code de connexion.
@@ -58,14 +58,14 @@ Et ce qu'il ne fait **jamais** : retirer un ami, accepter une demande de partage
 ## Installation
 
 1. Télécharge la [dernière version publiée](https://github.com/LASCAMPIA67/psn-amis/releases/latest) (`Source code (zip)`), puis décompresse-la où tu veux, par exemple dans `Documents\PSN Amis` : clic droit sur le fichier téléchargé, puis **Extraire tout**.
-2. Double-clique sur **`Lancer PSN Amis.cmd`**. La première fois, il installe Python et les bibliothèques (quelques dizaines de secondes, avec Internet), puis te demande ton code npsso : c'est l'étape suivante.
+2. Double-clique sur **`Lancer PSN Amis.cmd`**. La première fois, il installe Python et les bibliothèques (quelques dizaines de secondes, avec Internet), puis te demande ton code npsso : c'est l'étape suivante. Les fois suivantes, il vérifie en un instant que tout est à jour, puis ouvre le tableau de bord.
 
 > [!NOTE]
 > Comme pour tout fichier téléchargé, Windows peut demander une confirmation à la première ouverture du `.cmd` : clique sur **Exécuter**. Si rien ne se passe, fais un clic droit sur le fichier, **Propriétés**, coche **Débloquer**, puis réessaie.
 
 **Pour le retrouver facilement :** clic droit sur `Lancer PSN Amis.cmd`, **Envoyer vers › Bureau (créer un raccourci)**.
 
-**Pour le mettre à jour :** quitte PSN Amis (<kbd>Q</kbd> deux fois), télécharge la nouvelle version et décompresse-la au même endroit, en remplaçant les fichiers. `npsso.txt` et `journal.txt` ne sont pas dans l'archive : ils sont gardés.
+**Pour le mettre à jour :** quitte PSN Amis (<kbd>Q</kbd> deux fois), télécharge la nouvelle version et décompresse-la au même endroit, en remplaçant les fichiers, puis relance : le lanceur met à jour les bibliothèques tout seul. `npsso.txt` et `journal.txt` ne sont pas dans l'archive : ils sont gardés.
 
 **Pour le désinstaller :** quitte PSN Amis et supprime son dossier. Rien d'autre n'est installé, à part uv et le Python qu'il a téléchargé (`uv python uninstall 3.15` pour s'en défaire aussi).
 
@@ -78,7 +78,7 @@ PSN Amis parle à Sony en ton nom. Pour cela, il lui faut ton **code npsso** : u
 C'est à faire une seule fois (puis tous les deux mois environ), et **c'est ce qui décide du compte connecté** : donne le code de ton compte, et c'est ton compte que PSN Amis gère.
 
 > [!WARNING]
-> Ne fais pas cette étape pendant un live : le code serait visible à l'écran. Ne le donne à personne et ne le colle nulle part ailleurs : qui a ce code a ton compte.
+> Ne fais pas cette étape si ton écran est partagé ou enregistré : le code y serait visible. Ne le donne à personne et ne le colle nulle part ailleurs : qui a ce code a ton compte.
 
 1. Dans ton navigateur, connecte-toi sur [playstation.com](https://www.playstation.com) avec le compte que les joueurs doivent ajouter.
 2. Dans le même navigateur, ouvre <https://ca.account.sony.com/api/v1/ssocookie>. La page affiche une ligne du genre `{"npsso":"aB3x…"}`.
@@ -93,7 +93,7 @@ Le code est enregistré dans `npsso.txt`, dans le dossier de PSN Amis, lisible s
 
 ## Utilisation
 
-Double-clique sur **`Lancer PSN Amis.cmd`** et laisse la fenêtre ouverte pendant le live. Ce que tu vois :
+Double-clique sur **`Lancer PSN Amis.cmd`** et laisse la fenêtre ouverte tant que tu veux que les demandes soient acceptées. Ce que tu vois :
 
 - **En haut :** la version, le compte connecté et l'heure.
 - **Statut :** le voyant vert bat quand tout va bien, avec le compte à rebours jusqu'à la prochaine vérification. En cas de souci, la couleur change et une phrase dit quoi faire.
@@ -101,7 +101,7 @@ Double-clique sur **`Lancer PSN Amis.cmd`** et laisse la fenêtre ouverte pendan
 - **Depuis le lancement :** les ajouts de cette session.
 - **Amis :** ton nombre d'amis selon Sony, avec une jauge qui passe à l'orange puis au rouge en approchant de la limite de 2 000.
 - **Derniers ajouts :** heure et pseudo de chacun. Un nouvel ajout reste surligné en vert dix secondes.
-- **Activité :** ✓ vert pour un ajout, ▼ orange pour un ami retiré, ▲ jaune pour un souci passager, ✗ rouge pour un problème. Chaque message est affiché en entier.
+- **Activité :** ✓ vert pour un ajout, ▼ orange pour un ami retiré, ▲ jaune pour un souci passager, ✗ rouge pour un problème. Chaque message est affiché en entier ; ceux des jours précédents sont datés.
 
 Le **titre de la fenêtre** indique le nombre d'ajouts du jour, visible depuis la barre des tâches.
 
@@ -167,7 +167,7 @@ Garde un rythme raisonnable : PSNAWP, la bibliothèque utilisée, se limite elle
 - **Seuls les serveurs de Sony** (`sony.com`, `playstation.com`, `playstation.net`) peuvent être contactés. Toute autre adresse est bloquée avant l'envoi. Aucune télémétrie.
 - **PSN Amis ne retire jamais d'amis** et n'accepte jamais une demande de partage du vrai nom.
 - **`journal.txt` contient des pseudos** de joueurs : ne le publie pas tel quel.
-- **Pendant un live**, si tu captures la console dans OBS, les pseudos des joueurs acceptés sont visibles ; le code npsso, lui, ne l'est jamais. N'utilise pas l'assistant de connexion (<kbd>C</kbd>) à l'écran.
+- **Si tu partages ou enregistres ton écran**, les pseudos des joueurs acceptés sont visibles ; le code npsso, lui, ne l'est jamais. N'utilise pas l'assistant de connexion (<kbd>C</kbd>) pendant ce temps.
 - Une seule copie de PSN Amis tourne à la fois.
 
 Le détail de ce que fait le programme est dans [SECURITY.md](SECURITY.md).
@@ -209,7 +209,7 @@ Le détail de ce que fait le programme est dans [SECURITY.md](SECURITY.md).
 
 **PS4 ou PS5 ?** Les deux : les amis sont liés au compte, pas à la console.
 
-**Et si je ferme la fenêtre pendant le live ?** Plus rien n'est accepté. Relance PSN Amis, et les demandes arrivées entre-temps sont acceptées dans les 15 secondes. Le compteur du jour est relu dans le journal.
+**Et si je ferme la fenêtre ?** Plus rien n'est accepté. Relance PSN Amis, et les demandes arrivées entre-temps sont acceptées dans les 15 secondes. Le compteur du jour est relu dans le journal.
 
 **Puis-je le laisser tourner toute la journée ?** Oui, c'est fait pour. Il renouvelle lui-même ses autorisations auprès de Sony ; seul le code npsso est à refaire tous les deux mois environ.
 
@@ -250,4 +250,4 @@ Les idées et les corrections sont les bienvenues ! Lis le [guide de contributio
 
 PSN Amis est distribué sous [licence MIT](LICENSE).
 
-PSN Amis n'est affilié ni à Sony Interactive Entertainment, ni au projet PSNAWP. « PlayStation », « PlayStation Network », « PS4 » et « PS5 » sont des marques de Sony Interactive Entertainment. « Black Ops 2 » est une marque d'Activision. « TikTok » est une marque de ByteDance.
+PSN Amis n'est affilié ni à Sony Interactive Entertainment, ni au projet PSNAWP. « PlayStation », « PlayStation Network », « PS4 » et « PS5 » sont des marques de Sony Interactive Entertainment.
