@@ -501,27 +501,32 @@ class FilActivite:
         hauteur = options.height
         if hauteur is None:
             hauteur = 3 * len(self._evenements) + 1
-        # « 23:59:59 ✓ » devant chaque message, ou seulement « ✓ » si c'est étroit.
+        # « 23:59:59 ✓ » devant chaque message (« 10/11 23:59 ✓ » pour les jours
+        # précédents), ou seulement « ✓ » si c'est étroit.
         avec_heure = largeur >= 40
-        marge = 11 if avec_heure else 2
-        largeur_texte = max(largeur - marge, 10)
+        aujourd_hui = datetime.now().date()
 
         lignes: list[Text] = []
         for evenement in self._evenements:
             symbole, couleur = apparence_evenement(evenement)
+            debut = Text()
+            if avec_heure:
+                if evenement.moment.date() == aujourd_hui:
+                    horodatage = evenement.moment.strftime("%H:%M:%S")
+                else:
+                    horodatage = evenement.moment.strftime("%d/%m %H:%M")
+                debut.append(f"{horodatage} ", "discret")
+            debut.append(f"{symbole} ", couleur)
+            marge = debut.cell_len
             style = "titre" if couleur == "succes" else ""
-            morceaux = Text(evenement.texte, style=style).wrap(console, largeur_texte)
+            morceaux = Text(evenement.texte, style=style).wrap(
+                console, max(largeur - marge, 10)
+            )
             if lignes and len(lignes) + len(morceaux) > hauteur:
                 break
             for rang, morceau in enumerate(morceaux):
-                debut = Text()
-                if rang == 0:
-                    if avec_heure:
-                        debut.append(evenement.moment.strftime("%H:%M:%S "), "discret")
-                    debut.append(f"{symbole} ", couleur)
-                else:
-                    debut.append(" " * marge)
-                ligne = debut + morceau
+                prefixe = debut if rang == 0 else Text(" " * marge)
+                ligne = prefixe + morceau
                 ligne.no_wrap = True
                 ligne.overflow = "ellipsis"
                 lignes.append(ligne)

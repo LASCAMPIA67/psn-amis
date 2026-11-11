@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -167,6 +167,22 @@ def test_jamais_de_message_coupe_en_deux(sortie_nulle):
     )
     texte = " ".join("".join(segment.text for segment in ligne) for ligne in lignes)
     assert texte.count("message ") == texte.count("plusieurs lignes.")
+
+
+def test_date_devant_les_messages_des_jours_precedents(sortie_nulle):
+    suivi = moteur.Suivi()
+    hier = datetime.now() - timedelta(days=1)
+    suivi.evenement(hier, logging.INFO, "info", "Message d'hier")
+    suivi.evenement(datetime.now(), logging.INFO, "info", "Message du jour")
+    console = console_test(80, 10, sortie_nulle)
+    lignes = console.render_lines(
+        tb.FilActivite(suivi.instantane().evenements),
+        console.options.update(width=80, height=5),
+    )
+    texte = "\n".join("".join(segment.text for segment in ligne) for ligne in lignes)
+    assert hier.strftime("%d/%m %H:%M") + " • Message d'hier" in texte
+    assert "• Message du jour" in texte
+    assert "/" not in texte.splitlines()[0]
 
 
 def test_panneau_code_npsso(sortie_nulle):
