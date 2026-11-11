@@ -180,7 +180,9 @@ def dessiner(suivi: moteur.Suivi, largeur: int, hauteur: int, chemin: Path) -> N
         console.print(
             tb.construire_ecran(instant, tb.EtatInterface(), largeur, hauteur)
         )
-        console.save_svg(str(chemin), title=tb.titre_fenetre(instant))
+        # Écrit avec des fins de ligne LF, comme le reste du dépôt.
+        svg = console.export_svg(title=tb.titre_fenetre(instant))
+        chemin.write_text(svg, encoding="utf-8", newline="\n")
 
 
 def main() -> int:
