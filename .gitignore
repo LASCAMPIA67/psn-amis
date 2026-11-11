@@ -1,0 +1,21 @@
+# Secret : code de connexion PlayStation. Jamais partagé, jamais publié.
+npsso.txt
+npsso*.txt
+
+# Journal des acceptations (contient des pseudos de joueurs) et ses archives
+journal.txt
+journal.txt.*
+*.log
+
+# Verrou qui empêche de lancer le script deux fois
+accepter_amis.lock
+
+# Environnement Python propre au projet (recréé par « uv sync »)
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+
+# Réglages personnels de Claude Code
+.claude/settings.local.json

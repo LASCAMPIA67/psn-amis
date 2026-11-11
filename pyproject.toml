@@ -1,0 +1,96 @@
+[project]
+name = "psn-amis"
+version = "2.2.0"
+description = "Accepte automatiquement les demandes d'amis PlayStation Network, avec un tableau de bord en couleur dans la console."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "LASCAMPIA67" }]
+requires-python = ">=3.15"
+keywords = [
+    "playstation",
+    "psn",
+    "psnawp",
+    "demandes-d-amis",
+    "automatisation",
+    "console",
+    "rich",
+    "windows",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: French",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.15",
+    "Topic :: Games/Entertainment",
+    "Topic :: Utilities",
+    # Application, pas bibliothèque : jamais publiée sur PyPI.
+    "Private :: Do Not Upload",
+]
+dependencies = [
+    # Le script utilise quelques éléments internes de PSNAWP : on reste sur la série 3.1.
+    "psnawp>=3.1.0,<3.2",
+    "rich>=15.0.0,<16",
+]
+
+[project.urls]
+"Code source" = "https://github.com/LASCAMPIA67/psn-amis"
+"Journal des modifications" = "https://github.com/LASCAMPIA67/psn-amis/blob/main/CHANGELOG.md"
+"Signaler un problème" = "https://github.com/LASCAMPIA67/psn-amis/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+]
+
+[tool.uv]
+# Application lancée telle quelle (pas une bibliothèque à installer).
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+# Règles choisies dans https://docs.astral.sh/ruff/rules/ : erreurs, style, imports, pièges
+# courants, modernisation, sécurité (bandit), simplifications, journalisation, pytest.
+select = [
+    "E", "F", "W",  # pycodestyle, Pyflakes
+    "I",            # ordre des imports
+    "B",            # pièges courants (bugbear)
+    "UP",           # syntaxe moderne
+    "BLE",          # pas de « except Exception » sans raison
+    "S",            # sécurité (bandit)
+    "SIM", "C4", "PIE", "RET", "PERF", "FURB",  # code plus simple
+    "PTH",          # pathlib plutôt que os.path
+    "LOG", "G",     # journalisation
+    "PT",           # bonnes pratiques pytest
+    "RUF",          # règles propres à Ruff
+]
+ignore = [
+    # Accents et symboles Unicode voulus (textes en français, tableau de bord).
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# assert est la façon normale d'écrire un test pytest ; les tests de lancement
+# démarrent le programme dans un autre processus.
+"tests/**" = ["S101", "S603"]
+
+[tool.ruff.lint.pycodestyle]
+# Le code est mis en forme sur 88 colonnes ; les textes et commentaires
+# (qu'on ne peut pas couper automatiquement) ont droit à 100.
+max-line-length = 100
+
+[tool.ruff.format]
+quote-style = "double"

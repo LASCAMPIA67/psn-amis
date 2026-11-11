@@ -1,0 +1,14 @@
+// Relecture des documents Markdown : https://github.com/DavidAnson/markdownlint-cli2
+{
+  "config": {
+    "default": true,
+    // Pas de longueur maximale de ligne : les phrases restent entières.
+    "MD013": false,
+    // Titres identiques permis s'ils ne sont pas voisins (« Ajouté » dans chaque version du journal).
+    "MD024": { "siblings_only": true },
+    // Seules balises HTML permises : les touches du clavier.
+    "MD033": { "allowed_elements": ["kbd"] }
+  },
+  "globs": ["**/*.md"],
+  "ignores": [".venv/**", "node_modules/**"]
+}

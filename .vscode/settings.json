@@ -1,0 +1,7 @@
+{
+  // Python du projet (créé par « uv sync ») : VS Code l'utilise pour vérifier le code.
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  // Les tests se lancent depuis l'onglet « Tests » de VS Code.
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"]
+}

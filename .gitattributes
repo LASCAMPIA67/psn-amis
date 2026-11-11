@@ -1,0 +1,8 @@
+# Git range les fichiers texte avec des fins de ligne LF et les adapte à l'extraction.
+* text=auto eol=lf
+
+# Fichier de commandes Windows : fins de ligne CRLF, sinon cmd.exe peut se tromper.
+*.cmd text eol=crlf
+
+# Images : jamais modifiées.
+*.png binary

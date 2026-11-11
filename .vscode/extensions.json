@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "EditorConfig.EditorConfig",
+    "DavidAnson.vscode-markdownlint",
+    "tamasfe.even-better-toml"
+  ]
+}
