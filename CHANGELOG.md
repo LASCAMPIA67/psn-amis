@@ -1,0 +1,73 @@
+# Journal des modifications
+
+Toutes les modifications notables de PSN Amis sont consignées ici.
+
+Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le projet respecte le [versionnage sémantique](https://semver.org/lang/fr/). Les versions antérieures à la 2.2.0 ont été construites avant la mise du projet sous Git : elles n'ont pas d'étiquette.
+
+## [Non publié]
+
+## [2.2.0] - 2026-11-11
+
+Première version publiée sur GitHub. Le compte connecté est celui dont vient le code npsso : n'importe qui peut utiliser PSN Amis avec son propre compte PlayStation.
+
+### Ajouté
+
+- L'assistant de connexion : au premier lancement, PSN Amis demande le code npsso (saisie masquée), le vérifie et l'enregistre dans `npsso.txt`, lisible seulement par le compte Windows. La touche <kbd>C</kbd> du tableau de bord permet de changer de code, donc de compte, sans quitter ; en ligne de commande, `accepter_amis.py --configurer`.
+- Les demandes de **partage du vrai nom**, envoyées par des joueurs déjà amis, sont reconnues et mises à part : jamais acceptées, signalées une seule fois. Avant, elles étaient prises pour des demandes d'ami, et Sony les refusait toutes les 30 minutes (« Friend relation mismatch »).
+- Le numéro de version dans l'en-tête du tableau de bord.
+- Les tests automatiques (pytest) : faux Sony en mémoire, dessin de l'écran à onze tailles, lancement réel dans un autre processus.
+- Le dépôt GitHub : présentation, captures d'écran, journal des modifications, guide de contribution, sécurité, code de conduite, vérifications automatiques, publication des versions et Dependabot.
+
+### Modifié
+
+- Le tableau de bord s'adapte à la taille de la fenêtre et au zoom (<kbd>Ctrl</kbd> + molette) : quatre cartes sur une rangée, cartes compactes en 2 × 2, ou simple résumé ; gros chiffres seulement si la hauteur le permet ; en-tête et touches raccourcis quand la place manque.
+- Les messages du panneau Activité sont affichés en entier, sur plusieurs lignes si besoin, et jamais coupés en deux.
+- L'autorisation d'accès Sony (valable environ une heure) est renouvelée deux minutes avant son expiration : plus de « connexion expirée » passagère.
+- Les coches ✔ et les croix ✖ deviennent ✓ et ✗ : Windows dessinait les premières en émoji, deux fois trop larges et collées au texte.
+- Les refus de Sony sont décrits en une phrase courte.
+
+### Corrigé
+
+- Le masquage du code npsso pouvait laisser dépasser un caractère quand un ancien code, plus court, avait été lu avant le bon.
+- « 100 % » n'est plus affiché pour une liste d'amis presque pleine : le pourcentage est arrondi vers le bas.
+
+## [2.1.0] - 2026-11-10
+
+### Ajouté
+
+- La liste d'amis est recomptée auprès de Sony à chaque vérification : chaque ami qui n'y est plus (il vous a retiré, ou vous l'avez retiré) donne une ligne « ▼ Ami retiré : pseudo » dans Activité et dans `journal.txt`.
+- La carte Amis indique le remplissage en pourcentage et depuis quand le chiffre est à jour.
+
+### Corrigé
+
+- Le nombre d'amis n'était demandé à Sony qu'au démarrage, puis augmenté de 1 à chaque acceptation : il ne baissait jamais.
+
+## [2.0.0] - 2026-11-10
+
+### Ajouté
+
+- Le tableau de bord en couleur dans la console, dessiné avec Rich : statut avec voyant et compte à rebours, ajouts du jour en gros chiffres (relus dans le journal au démarrage), ajouts depuis le lancement, jauge d'amis sur 2 000, derniers ajouts avec l'heure, fil d'activité, titre de fenêtre avec le nombre d'ajouts.
+- Les touches : <kbd>P</kbd> pause, <kbd>V</kbd> vérifier maintenant, <kbd>J</kbd> ouvrir le journal, <kbd>Q</kbd> deux fois pour quitter. <kbd>Ctrl</kbd> + <kbd>C</kbd> devient une simple touche : plus de question « Terminer le programme de commandes ? ».
+- `Lancer PSN Amis.cmd` : un double-clic ouvre la console ; la première fois, il installe Python et les bibliothèques avec uv.
+- La fermeture de la fenêtre avec la croix est notée dans le journal.
+- Le moteur est relancé tout seul s'il s'arrêtait par accident.
+
+### Modifié
+
+- Vérification toutes les 15 secondes, au lieu de 60.
+- Le code est découpé en trois fichiers : `moteur.py` (Sony et acceptations), `tableau_de_bord.py` (affichage), `accepter_amis.py` (démarrage).
+- Le projet est géré avec uv (`pyproject.toml`, `uv.lock`) et tourne sous Python 3.15 ; le code est vérifié par Ruff.
+- Le processus tourne en priorité basse : le jeu, OBS et le logiciel de live passent avant.
+
+## [1.0.0] - 2026-11-10
+
+### Ajouté
+
+- Première version : un script qui accepte les demandes d'amis reçues, affiche chaque pseudo accepté avec l'heure et l'écrit dans `journal.txt`.
+- Le code npsso est lu dans `npsso.txt`, jamais affiché ni journalisé (il est masqué dans tous les messages) ; seuls les serveurs de Sony peuvent être contactés ; chaque requête a un délai maximal.
+- Coupures Internet et pannes de Sony : nouvel essai automatique, avec une attente progressive. Code npsso expiré : marche à suivre affichée, nouveau code repéré tout seul.
+- Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
+- Une seule instance à la fois, grâce à un fichier verrou.
+
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/LASCAMPIA67/psn-amis/releases/tag/v2.2.0
