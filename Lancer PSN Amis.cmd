@@ -1,5 +1,5 @@
 @echo off
-chcp 65001 >/dev/null
+chcp 65001 >nul
 setlocal
 title PSN Amis
 cd /d "%~dp0"
@@ -10,24 +10,30 @@ rem  l'acceptation automatique des demandes d'amis PSN.
 rem  Pour arrêter : touche Q deux fois, ou fermez la fenêtre.
 rem ================================================================
 
-rem Avec uv : installe Python et les bibliothèques la première fois, puis les
-rem met à jour après une nouvelle version de PSN Amis. Un instant si rien n'a changé.
-where uv >/dev/null 2>/dev/null
-if %errorlevel%==0 (
-    if not exist ".venv\Scripts\python.exe" echo Première utilisation : installation de Python et des bibliothèques, patientez...
-    uv sync --frozen --no-dev --quiet || goto :erreur
-) else if not exist ".venv\Scripts\python.exe" (
-    goto :sans_uv
+rem Avec uv : installe Python et les bibliothèques la première fois, puis les met
+rem à jour après une nouvelle version de PSN Amis. Un instant si rien n'a changé.
+rem Rien n'est retiré de l'environnement : une bibliothèque de développement en
+rem cours d'utilisation, Ruff ouvert par un éditeur par exemple, ne gêne pas.
+where uv >nul 2>nul
+if %errorlevel% neq 0 goto :sans_uv
+if not exist ".venv\Scripts\python.exe" echo Première utilisation : installation de Python et des bibliothèques, patientez...
+uv sync --frozen --no-dev --inexact --quiet
+if %errorlevel% neq 0 (
+    if not exist ".venv\Scripts\python.exe" goto :erreur
+    echo Mise à jour des bibliothèques impossible pour l'instant : PSN Amis démarre avec celles déjà installées.
 )
-
-".venv\Scripts\python.exe" accepter_amis.py %*
-if errorlevel 1 goto :erreur
-exit /b 0
+goto :lancer
 
 :sans_uv
+if exist ".venv\Scripts\python.exe" goto :lancer
 echo L'outil « uv » est introuvable : impossible d'installer Python et les bibliothèques.
 echo Installez-le depuis https://docs.astral.sh/uv/ puis relancez ce fichier.
 goto :attendre
+
+:lancer
+".venv\Scripts\python.exe" accepter_amis.py %*
+if errorlevel 1 goto :erreur
+exit /b 0
 
 :erreur
 echo.
