@@ -11,13 +11,14 @@ Q deux fois pour quitter (Ctrl+C quitte aussi).
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import logging
 import math
 import os
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -764,16 +765,34 @@ class Clavier:
             if entree and self._k32.GetConsoleMode(entree, ctypes.byref(mode)):
                 self._entree = entree
                 self._mode_initial = mode.value
-                retires = (
-                    self.TRAITEMENT_CTRL_C | self.SAISIE_SOURIS | self.EDITION_RAPIDE
-                )
-                nouveau = (mode.value | self.OPTIONS_ETENDUES) & ~retires
-                self._k32.SetConsoleMode(entree, nouveau)
+                self._appliquer()
         return self
 
     def __exit__(self, *details: object) -> None:
-        if self._k32 is not None and self._entree and self._mode_initial is not None:
-            self._k32.SetConsoleMode(self._entree, self._mode_initial)
+        self._restaurer()
+
+    def _appliquer(self) -> None:
+        """Réglage « tableau de bord » : Ctrl+C simple touche, ni édition rapide ni souris."""
+        if self._k32 is None or not self._entree or self._mode_initial is None:
+            return
+        retires = self.TRAITEMENT_CTRL_C | self.SAISIE_SOURIS | self.EDITION_RAPIDE
+        nouveau = (self._mode_initial | self.OPTIONS_ETENDUES) & ~retires
+        self._k32.SetConsoleMode(self._entree, nouveau)
+
+    def _restaurer(self) -> None:
+        if self._k32 is None or not self._entree or self._mode_initial is None:
+            return
+        self._k32.SetConsoleMode(self._entree, self._mode_initial)
+
+    @contextlib.contextmanager
+    def mode_initial(self) -> Iterator[None]:
+        """Rend provisoirement à la console son réglage d'origine, le temps d'une saisie :
+        le collage par clic droit marche, et Ctrl+C interrompt la saisie."""
+        self._restaurer()
+        try:
+            yield
+        finally:
+            self._appliquer()
 
     def touches(self, attente_ms: int) -> list[str]:
         """Attend au plus attente_ms qu'une touche soit pressée ; renvoie les touches.
@@ -852,7 +871,11 @@ def traiter_touche(
 
 
 def changer_le_code(
-    ecran: Live, console: Console, commandes: Commandes, interface: EtatInterface
+    ecran: Live,
+    console: Console,
+    clavier: Clavier,
+    commandes: Commandes,
+    interface: EtatInterface,
 ) -> None:
     """Touche C : quitte l'écran du tableau de bord le temps de coller un nouveau code,
     puis y revient. Avec un code valide, le moteur se reconnecte à ce compte."""
@@ -862,9 +885,11 @@ def changer_le_code(
         console.print(
             f"[accent]◆ PSN AMIS[/] [discret]{moteur.VERSION}[/]  ·  changer le code npsso"
         )
-        enregistre = moteur.assistant_npsso(
-            dire=lambda texte: console.print(texte, markup=False, highlight=False)
-        )
+        # Console en mode normal pendant la saisie : collage par clic droit, Ctrl+C.
+        with clavier.mode_initial():
+            enregistre = moteur.assistant_npsso(
+                dire=lambda texte: console.print(texte, markup=False, highlight=False)
+            )
     finally:
         ecran.start(refresh=True)
     if enregistre:
@@ -908,7 +933,7 @@ def lancer(
             for touche in clavier.touches(attente):
                 action = traiter_touche(touche, interface, commandes)
                 if action == "configurer":
-                    changer_le_code(ecran, console, commandes, interface)
+                    changer_le_code(ecran, console, clavier, commandes, interface)
                 elif action:
                     return action
 

@@ -243,6 +243,8 @@ def test_touche_j_sans_journal(dossier):
 def test_clavier_sans_console():
     with tb.Clavier() as clavier:
         assert clavier.touches(100) == []
+        with clavier.mode_initial():
+            pass
 
 
 # ─── Journal → Activité ───────────────────────────────────────────────────────
