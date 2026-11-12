@@ -468,17 +468,33 @@ class ListeAjouts:
         if avec_anciennete:
             tableau.add_column("", style="discret", justify="right", no_wrap=True)
 
+        # Dernier retrait connu de chaque pseudo : un ajout plus ancien que ce retrait
+        # est marqué « ▼ » (le joueur a depuis quitté la liste d'amis).
+        retraits: dict[str, datetime] = {}
+        for retrait in self._instant.retraits:
+            retraits.setdefault(retrait.pseudo, retrait.moment)
+
         numero = self._instant.ajouts_jour
         # Une ligne est prise par les titres des colonnes.
         for ajout in ajouts[: max(hauteur - 1, 1)]:
             du_jour = ajout.moment.date() == self._maintenant.date()
             age = (self._maintenant - ajout.moment).total_seconds()
+            retire = retraits.get(ajout.pseudo, ajout.moment) > ajout.moment
             cellules: list[RenderableType] = []
             if avec_numero:
                 cellules.append(Text(str(numero) if du_jour else ""))
-            cellules += [Text(ajout.moment.strftime("%H:%M:%S")), Text(ajout.pseudo)]
+            cellules.append(Text(ajout.moment.strftime("%H:%M:%S")))
+            if retire:
+                cellules.append(
+                    Text.assemble((ajout.pseudo, "discret"), (" ▼", "retrait"))
+                )
+            else:
+                cellules.append(Text(ajout.pseudo))
             if avec_anciennete:
-                cellules.append(Text(il_y_a(ajout.moment, self._maintenant)))
+                if retire:
+                    cellules.append(Text("retiré", style="retrait"))
+                else:
+                    cellules.append(Text(il_y_a(ajout.moment, self._maintenant)))
             tableau.add_row(
                 *cellules, style="nouveau" if age < DUREE_SURBRILLANCE else None
             )

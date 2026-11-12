@@ -151,7 +151,9 @@ def main() -> int:
         )
         return 1
     moteur.baisser_priorite()
-    suivi = moteur.Suivi(moteur.ajouts_du_jour_dans_journal())
+    suivi = moteur.Suivi(
+        moteur.ajouts_du_jour_dans_journal(), moteur.retraits_du_jour_dans_journal()
+    )
     commandes = moteur.Commandes()
     fin = Fin(suivi, commandes, verrou, noter=not choix.test)
 

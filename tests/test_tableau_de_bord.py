@@ -119,8 +119,12 @@ def test_contenu_des_cartes(suivi_rempli, sortie_nulle):
         "% de 2000",
         "compté",
         "▼ Ami retiré : Pseudo_b",
+        # Dans « Derniers ajouts », l'ami retiré est marqué, les autres non.
+        "Pseudo_b ▼",
+        "retiré",
     ):
         assert mot in apercu
+    assert "Pseudo_c ▼" not in apercu
     # Pas de symbole émoji : Windows les dessine en couleur et deux fois trop larges.
     assert "✔" not in apercu
     assert "✖" not in apercu

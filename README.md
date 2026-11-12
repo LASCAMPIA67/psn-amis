@@ -100,7 +100,7 @@ Double-clique sur **`Lancer PSN Amis.cmd`** et laisse la fenêtre ouverte tant q
 - **Aujourd'hui :** les ajouts du jour, en gros chiffres. Ce compteur est relu dans le journal au démarrage : il ne repart pas à zéro si tu relances.
 - **Depuis le lancement :** les ajouts de cette session.
 - **Amis :** ton nombre d'amis selon Sony, avec une jauge qui passe à l'orange puis au rouge en approchant de la limite de 2 000.
-- **Derniers ajouts :** heure et pseudo de chacun. Un nouvel ajout reste surligné en vert dix secondes.
+- **Derniers ajouts :** heure et pseudo de chacun. Un nouvel ajout reste surligné en vert dix secondes. Un **▼** orange après un pseudo signale un joueur qui a depuis quitté ta liste d'amis.
 - **Activité :** ✓ vert pour un ajout, ▼ orange pour un ami retiré, ▲ jaune pour un souci passager, ✗ rouge pour un problème. Chaque message est affiché en entier ; ceux des jours précédents sont datés.
 
 Le **titre de la fenêtre** indique le nombre d'ajouts du jour, visible depuis la barre des tâches.

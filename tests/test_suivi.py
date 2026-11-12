@@ -78,14 +78,27 @@ def test_relecture_des_ajouts_du_jour(dossier):
     (dossier / "journal.txt").write_text(
         f"{hier:%Y-%m-%d} 23:59:00  Demande acceptée : Hier\n"
         f"{maintenant:%Y-%m-%d} 09:00:00  Demande acceptée : Matin\n"
-        f"{maintenant:%Y-%m-%d} 09:00:05  Connecté au compte PSN x (3 amis).\n",
+        f"{maintenant:%Y-%m-%d} 09:00:05  Connecté au compte PSN x (3 amis).\n"
+        f"{maintenant:%Y-%m-%d} 09:30:00  Ami retiré : Matin\n",
         encoding="utf-8",
     )
     lus = moteur.ajouts_du_jour_dans_journal()
     assert [ajout.pseudo for ajout in lus] == ["Ancien", "Matin"]
-    instant = moteur.Suivi(lus).instantane()
+    retraits = moteur.retraits_du_jour_dans_journal()
+    assert [retrait.pseudo for retrait in retraits] == ["Matin"]
+    instant = moteur.Suivi(lus, retraits).instantane()
     assert instant.ajouts_jour == 2
     assert instant.derniers_ajouts[0].pseudo == "Matin"
+    assert instant.retraits[0].pseudo == "Matin"
+
+
+def test_retrait_note_dans_le_suivi():
+    suivi = moteur.Suivi()
+    suivi.ajout("Joueur1")
+    suivi.retrait("Joueur1")
+    instant = suivi.instantane()
+    assert instant.retraits[0].pseudo == "Joueur1"
+    assert instant.retraits[0].moment >= instant.derniers_ajouts[0].moment
 
 
 def test_journal_absent(dossier):

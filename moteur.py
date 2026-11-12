@@ -49,7 +49,7 @@ from psnawp_api.utils import API_PATH, BASE_PATH
 from requests.adapters import HTTPAdapter
 
 # Version du programme (la même que dans pyproject.toml et CHANGELOG.md).
-VERSION = "2.3.1"
+VERSION = "2.4.0"
 
 # ─── Réglages ─────────────────────────────────────────────────────────────────
 # Secondes entre deux vérifications. À chaque fois : demandes reçues acceptées, puis
@@ -313,6 +313,8 @@ class Instantane:
     ajouts_jour: int
     # Du plus récent au plus ancien.
     derniers_ajouts: tuple[Ajout, ...]
+    # Amis retirés (pseudo et moment), du plus récent au plus ancien.
+    retraits: tuple[Ajout, ...]
     evenements: tuple[Evenement, ...]
     debut: datetime
     # Moment de la prochaine vérification, sur l'horloge time.monotonic().
@@ -327,9 +329,15 @@ class Instantane:
 class Suivi:
     """État du moteur, lu par l'affichage. Un verrou le protège : deux fils l'utilisent."""
 
-    def __init__(self, ajouts_du_jour: list[Ajout] | None = None) -> None:
+    def __init__(
+        self,
+        ajouts_du_jour: list[Ajout] | None = None,
+        retraits_du_jour: list[Ajout] | None = None,
+    ) -> None:
         precedents = sorted(ajouts_du_jour or [], key=lambda ajout: ajout.moment)
+        retraits = sorted(retraits_du_jour or [], key=lambda retrait: retrait.moment)
         self._verrou = threading.Lock()
+        self._retraits: deque[Ajout] = deque(reversed(retraits[-200:]), maxlen=200)
         self._statut = Statut.DEMARRAGE
         self._detail = "Démarrage…"
         self._pseudo_compte: str | None = None
@@ -405,6 +413,11 @@ class Suivi:
             if self._en_attente:
                 self._en_attente -= 1
 
+    def retrait(self, pseudo: str) -> None:
+        """Un ami vient de quitter la liste : « Derniers ajouts » le signalera."""
+        with self._verrou:
+            self._retraits.appendleft(Ajout(datetime.now(), pseudo))
+
     def evenement(self, moment: datetime, niveau: int, genre: str, texte: str) -> None:
         with self._verrou:
             self._evenements.appendleft(Evenement(moment, niveau, genre, texte))
@@ -421,6 +434,7 @@ class Suivi:
                 ajouts_session=self._ajouts_session,
                 ajouts_jour=self._ajouts_jour,
                 derniers_ajouts=tuple(self._derniers),
+                retraits=tuple(self._retraits),
                 evenements=tuple(self._evenements),
                 debut=self._debut,
                 prochaine_verification=self._prochaine,
@@ -478,29 +492,42 @@ class Commandes:
 MOTIF_AJOUT = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Demande acceptée : (.+)$"
 )
+MOTIF_RETRAIT = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Ami retiré : (.+)$"
+)
 
 
-def ajouts_du_jour_dans_journal() -> list[Ajout]:
-    """Relit les ajouts d'aujourd'hui dans journal.txt (et ses archives) au démarrage."""
+def _du_jour_dans_journal(motif: re.Pattern[str]) -> list[Ajout]:
+    """Les lignes d'aujourd'hui de journal.txt (et de ses archives) qui suivent un motif."""
     aujourd_hui = date.today()
     fichiers = [
         FICHIER_JOURNAL.with_name(f"{FICHIER_JOURNAL.name}.{numero}")
         for numero in (3, 2, 1)
     ] + [FICHIER_JOURNAL]
-    ajouts: list[Ajout] = []
+    trouves: list[Ajout] = []
     for fichier in fichiers:
         try:
             lignes = fichier.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
         for ligne in lignes:
-            correspondance = MOTIF_AJOUT.match(ligne)
+            correspondance = motif.match(ligne)
             if not correspondance:
                 continue
             moment = datetime.strptime(correspondance[1], "%Y-%m-%d %H:%M:%S")
             if moment.date() == aujourd_hui:
-                ajouts.append(Ajout(moment, correspondance[2].strip()))
-    return ajouts
+                trouves.append(Ajout(moment, correspondance[2].strip()))
+    return trouves
+
+
+def ajouts_du_jour_dans_journal() -> list[Ajout]:
+    """Relit les ajouts d'aujourd'hui dans journal.txt au démarrage."""
+    return _du_jour_dans_journal(MOTIF_AJOUT)
+
+
+def retraits_du_jour_dans_journal() -> list[Ajout]:
+    """Relit les amis retirés aujourd'hui dans journal.txt au démarrage."""
+    return _du_jour_dans_journal(MOTIF_RETRAIT)
 
 
 # ─── Code npsso ───────────────────────────────────────────────────────────────
@@ -941,11 +968,9 @@ def recompter_amis(connexion: Connexion, etat: Etat, suivi: Suivi) -> None:
         retires = sorted(etat.amis_connus - amis)
 
     for compte in retires[:NOMBRE_MAX_RETRAITS_DETAILLES]:
-        journal.info(
-            "Ami retiré : %s",
-            trouver_joueur(connexion, compte).online_id,
-            extra={"genre": GENRE_RETRAIT},
-        )
+        pseudo = trouver_joueur(connexion, compte).online_id
+        suivi.retrait(pseudo)
+        journal.info("Ami retiré : %s", pseudo, extra={"genre": GENRE_RETRAIT})
     if len(retires) > NOMBRE_MAX_RETRAITS_DETAILLES:
         journal.info(
             "... et %d autre(s) ami(s) retiré(s).",

@@ -124,6 +124,7 @@ def suivi_demo() -> moteur.Suivi:
         "touche pas. Répondez vous-même sur la console si vous le souhaitez.",
     )
     evenement(suivi, 700, logging.INFO, moteur.GENRE_RETRAIT, "Ami retiré : ZedRush_")
+    suivi.retrait("ZedRush_")
     for rang, pseudo in enumerate(reversed(PSEUDOS[1:3]), start=1):
         evenement(
             suivi,
