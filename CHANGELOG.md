@@ -6,6 +6,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le p
 
 ## [Non publié]
 
+## [2.4.1] - 2026-11-12
+
+### Corrigé
+
+- Un test automatique n'avait pas été mis à jour avec la 2.4.0, dont la publication a donc été refusée par les vérifications. Même programme, test corrigé.
+
 ## [2.4.0] - 2026-11-12
 
 ### Ajouté
@@ -93,7 +99,8 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
 - Une seule instance à la fois, grâce à un fichier verrou.
 
-[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.0...HEAD
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.2.0...v2.3.0

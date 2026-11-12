@@ -1,6 +1,6 @@
 [project]
 name = "psn-amis"
-version = "2.4.0"
+version = "2.4.1"
 description = "Accepte automatiquement les demandes d'amis PlayStation Network, avec un tableau de bord en couleur dans la console."
 readme = "README.md"
 license = "MIT"
