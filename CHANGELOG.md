@@ -6,6 +6,12 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le p
 
 ## [Non publié]
 
+## [2.4.0] - 2026-11-12
+
+### Ajouté
+
+- Dans « Derniers ajouts », un joueur qui a depuis quitté la liste d'amis est marqué d'un **▼** orange après son pseudo, avec « retiré » à la place de l'ancienneté. Les retraits du jour sont relus dans `journal.txt` au démarrage, comme les ajouts.
+
 ## [2.3.1] - 2026-11-11
 
 ### Corrigé
@@ -87,7 +93,8 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
 - Une seule instance à la fois, grâce à un fichier verrou.
 
-[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.1...HEAD
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/LASCAMPIA67/psn-amis/releases/tag/v2.2.0
