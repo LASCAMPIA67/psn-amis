@@ -64,6 +64,7 @@ def suivi_rempli() -> moteur.Suivi:
     suivi.evenement(
         maintenant, logging.INFO, moteur.GENRE_RETRAIT, "Ami retiré : Pseudo_b"
     )
+    suivi.retrait("Pseudo_b")
     suivi.verification_terminee()
     suivi.statut(moteur.Statut.EN_MARCHE, "En attente de demandes d'amis", 15)
     return suivi
