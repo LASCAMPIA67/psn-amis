@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-import coffre
-import moteur
+from psn_amis import coffre, moteur
 from tests.conftest import FAUX_CODE
 
 CAS_ACCEPTES = {

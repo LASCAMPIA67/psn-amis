@@ -14,6 +14,7 @@ import pytest
 RACINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE / "outils"))
 
+import construire  # noqa: E402
 import exporter_journal  # noqa: E402
 import icone  # noqa: E402
 import raccourcis  # noqa: E402
@@ -115,3 +116,13 @@ def test_lanceurs_en_fins_de_ligne_windows(nom):
     assert b"\r\n" in contenu
     assert b"\n" not in contenu.replace(b"\r\n", b"")
     assert contenu.decode("utf-8")
+
+
+def test_empreintes_lisibles_par_sha256sum(tmp_path, monkeypatch):
+    # La publication vérifie le fichier sous Linux : fins de ligne Unix obligatoires.
+    monkeypatch.setattr(construire, "DISTRIBUTION", tmp_path)
+    fichier = tmp_path / "PSN-Amis-Setup-9.9.9.exe"
+    fichier.write_bytes(b"MZ installateur")
+    sommes = construire.empreintes([fichier]).read_bytes()
+    assert b"\r" not in sommes
+    assert sommes.endswith(b"  PSN-Amis-Setup-9.9.9.exe\n")

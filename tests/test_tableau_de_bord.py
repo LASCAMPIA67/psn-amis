@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-import moteur
-import tableau_de_bord as tb
+from psn_amis import moteur
+from psn_amis import tableau_de_bord as tb
 from tests.conftest import FAUX_CODE
 
 MESSAGE_LONG = (

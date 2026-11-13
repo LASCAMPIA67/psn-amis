@@ -6,8 +6,8 @@ Seule la dernière version publiée reçoit des corrections de sécurité.
 
 | Version | Corrections de sécurité |
 | --- | --- |
-| 2.5.x | oui |
-| 2.4.x et avant | non |
+| 3.0.x | oui |
+| 2.5.x et avant | non |
 
 ## Signaler une faille
 
@@ -19,23 +19,30 @@ Décris le problème, comment le reproduire et son effet possible. Tu recevras u
 
 Le code npsso donne accès à **tout** ton compte PlayStation, comme un mot de passe. PSN Amis le traite ainsi :
 
-- Il est gardé dans le **Gestionnaire d'identification de Windows** (entrée « PSN Amis/npsso »), chiffré avec ta session Windows : un autre compte Windows du même PC ne peut pas le lire. Avec `coffre_windows = false` dans `reglages.toml`, il est gardé à la place dans `npsso.txt`, dans le dossier du programme, réservé à ton compte Windows (droits NTFS). L'assistant de connexion le saisit sans l'afficher.
-- Un `npsso.txt` présent au démarrage est rangé dans le coffre, puis supprimé seulement après avoir relu le code dans le coffre sans erreur.
-- Il n'est **jamais** affiché, ni écrit dans `journal.txt`, ni dans un message d'erreur : s'il apparaissait par accident, il serait remplacé par `[code masqué]`.
+- Il est gardé dans le **Gestionnaire d'identification de Windows** (entrée « PSN Amis/npsso »), chiffré avec ta session Windows : un autre compte Windows du même PC ne peut pas le lire. Avec le réglage « Code npsso dans le coffre de Windows » désactivé, il est gardé à la place dans `%LOCALAPPDATA%\PSN Amis\npsso.txt`, réservé à ton compte Windows (droits NTFS). Il n'est **jamais** rangé dans le dossier d'installation.
+- Il est saisi dans un champ masqué, effacé du champ dès la validation, vérifié auprès de Sony, puis rangé.
+- Il n'est **jamais** affiché, ni écrit dans le journal, la console d'activité, un message d'erreur ou un export : s'il apparaissait par accident, il serait remplacé par `[code masqué]`. Les exports de réglages ne le contiennent pas.
 - Il ne quitte ton PC que vers les serveurs d'authentification de Sony, pour obtenir une autorisation d'accès temporaire.
-- `npsso.txt` est ignoré par Git (`.gitignore`) : il ne peut pas être publié par erreur, même depuis une copie du dépôt. Le dossier `.claude/` contient aussi une règle qui interdit à Claude Code de lire ce fichier.
-- Si tu penses que ton code a fui : déconnecte-toi de playstation.com dans ce navigateur et change ton mot de passe. L'ancien code cesse alors de fonctionner. Pour l'effacer de ton PC : **Panneau de configuration › Gestionnaire d'identification › Informations d'identification Windows**, entrée **PSN Amis/npsso**.
+- La désinstallation ne le retire que si tu le demandes (niveau 3, ou case cochée au niveau 2), et ne retire que cette entrée du Gestionnaire d'identification.
+- Si tu penses que ton code a fui : déconnecte-toi de playstation.com dans ce navigateur et change ton mot de passe. L'ancien code cesse alors de fonctionner.
 
 ## Ce que fait PSN Amis
 
 Pour évaluer les risques, voici exactement ce que fait le programme :
 
-- **Internet :** pour ton compte, il ne contacte que les serveurs de Sony (`sony.com`, `playstation.com`, `playstation.net`), à travers la bibliothèque [PSNAWP](https://github.com/isFakeAccount/psnawp). Toute autre adresse est bloquée avant l'envoi. Il lit les demandes d'amis reçues, la liste d'amis et les profils publics des joueurs concernés ; il accepte des demandes d'amis. Il ne retire jamais d'amis et n'accepte jamais une demande de partage du vrai nom.
-- **Vérification de version (coupée au départ) :** avec `verifier_mises_a_jour = true` dans `reglages.toml`, une seule requête est envoyée au démarrage à `api.github.com` pour lire le numéro de la dernière version publiée. Elle ne contient ni code, ni pseudo, ni identifiant. Rien n'est téléchargé ni installé : PSN Amis affiche seulement un message.
-- **Fichiers :** dans son dossier, il écrit `journal.txt` (dates, heures et pseudos des joueurs acceptés ou retirés), `amis.json` (identifiants des amis connus, pour repérer ceux qui partent pendant l'arrêt), `reglages.toml` (copié de l'exemple au premier lancement), `accepter_amis.lock` (verrou), et `diagnostic.txt` seulement avec l'option `--diagnostic` (détails techniques, code toujours masqué). Il écrit aussi le petit fichier de suivi des requêtes de PSNAWP dans le dossier temporaire de Windows. Les outils facultatifs écrivent un export CSV du journal (`outils/exporter_journal.py`) et des raccourcis sur le Bureau ou au démarrage de Windows (`Raccourcis PSN Amis.cmd`).
-- **Système :** il baisse sa propre priorité, règle le mode de sa console le temps du tableau de bord (et le remet à la sortie), peut ouvrir `journal.txt` dans le Bloc-notes à ta demande (touche <kbd>J</kbd>), lit et écrit son entrée du Gestionnaire d'identification de Windows, et lance Windows PowerShell en arrière-plan pour afficher une bulle de notification (code à renouveler, liste pleine, longue coupure ; réglage `notifications`).
-- **Rien d'autre :** aucune télémétrie, aucune mise à jour automatique, aucun compte créé ailleurs.
+- **Sony :** pour ton compte, il ne contacte que les serveurs de Sony (`sony.com`, `playstation.com`, `playstation.net`), à travers la bibliothèque [PSNAWP](https://github.com/isFakeAccount/psnawp), au plus une requête toutes les 3 secondes. Toute autre adresse est bloquée avant l'envoi. Il lit les demandes reçues, la liste d'amis et les profils publics des joueurs concernés ; il accepte des demandes d'amis ; à ta demande seulement (ou avec un nettoyage que tu as activé), il supprime des amis, ou refuse les demandes de ta liste noire si tu l'as choisi. Il n'accepte et ne refuse jamais une demande d'ami proche (partage du vrai nom).
+- **Suppressions :** jamais un ami protégé, jamais le compte connecté, jamais pour un autre compte que celui pour lequel l'opération a été préparée. La relation d'amitié est vérifiée auprès de Sony juste avant chaque suppression ; une suppression sans réponse claire n'est jamais refaite automatiquement. Chaque opération est notée dans `comptes\<identifiant>\operations.jsonl`.
+- **GitHub (seulement si tu l'autorises) :** une requête à `api.github.com` pour lire la dernière version publiée. Elle ne contient ni code, ni pseudo, ni identifiant. Le téléchargement d'une mise à jour n'a lieu qu'après ton clic sur « Installer la mise à jour » : seulement depuis les adresses GitHub du projet, en HTTPS, avec vérification de la taille et de l'empreinte SHA-256 (annoncée par l'API GitHub et par `SHA256SUMS.txt`). Ces empreintes viennent de GitHub comme le fichier : elles prouvent qu'il est intact, pas à elles seules qu'il est authentique. Si l'installateur est signé, sa signature Authenticode est contrôlée avant le lancement ; une signature invalide bloque l'installation.
+- **Fichiers :** les données sont dans `%LOCALAPPDATA%\PSN Amis` : `reglages.toml` (et `.bak`), `journal.txt` et ses archives (dates, heures et pseudos des joueurs acceptés, partis ou supprimés), `amis.json`, le dossier `comptes\` (amis connus, amis protégés, historique des opérations, compteurs du nettoyage), `mises_a_jour\` (installateur téléchargé), le verrou `psn-amis.lock`, le fichier témoin `psn-amis.donnees`, et `diagnostic.txt` seulement avec `--diagnostic` (détails techniques, code toujours masqué). PSNAWP écrit aussi un petit fichier de suivi des requêtes dans le dossier temporaire de Windows, effacé à la fermeture.
+- **Système :** installation et fonctionnement sans droits administrateur. Il baisse sa propre priorité, lit et écrit son entrée du Gestionnaire d'identification, lance Windows PowerShell en arrière-plan pour une bulle de notification (code à renouveler, liste pleine, longue coupure, nettoyage), et, si tu l'actives, ajoute une valeur « PSN Amis » dans `HKEY_CURRENT_USER\…\Run` pour démarrer avec Windows.
+- **Rien d'autre :** aucune télémétrie, aucun serveur local, aucun port ouvert, aucune mise à jour installée sans ton accord.
 
-## Bibliothèques
+## Désinstallation
 
-Les versions exactes de toutes les bibliothèques sont figées dans `uv.lock` et installées par `uv sync --locked`. Dependabot propose leurs mises à jour chaque mois, et les actions GitHub des workflows sont figées par empreinte de commit.
+Le programme de désinstallation ne supprime que des fichiers et dossiers nommés de PSN Amis, et seulement dans un dossier de données qui contient le fichier témoin `psn-amis.donnees`. Un fichier ajouté par l'utilisateur est gardé, et le dossier n'est retiré que s'il est vide. Python, uv et les autres programmes ne sont jamais touchés.
+
+## Distribution et bibliothèques
+
+- L'installateur et ses empreintes sont construits par GitHub Actions à partir d'une étiquette `vX.Y.Z`, après les tests, la compilation, le démarrage réel des exécutables et un test complet d'installation et de désinstallation.
+- L'installateur n'est **pas encore signé** par un certificat de signature de code : Windows SmartScreen peut le signaler. Ne désactive jamais SmartScreen ni ton antivirus ; télécharge PSN Amis uniquement depuis la page des versions du dépôt.
+- Les versions exactes de toutes les bibliothèques sont figées dans `uv.lock` et installées par `uv sync --locked`. Dependabot propose leurs mises à jour chaque mois (14 jours après leur sortie), et les actions GitHub des workflows sont figées par empreinte de commit, avec des permissions minimales. Inno Setup est téléchargé depuis sa publication officielle et vérifié par son empreinte SHA-256.

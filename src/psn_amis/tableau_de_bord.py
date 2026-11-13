@@ -35,9 +35,8 @@ from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
-import moteur
-import notifications
-from moteur import Commandes, Evenement, Instantane, Statut, Suivi, journal
+from psn_amis import moteur, notifications
+from psn_amis.moteur import Commandes, Evenement, Instantane, Statut, Suivi, journal
 
 # ─── Apparence ────────────────────────────────────────────────────────────────
 # Trois jeux de couleurs, choisis dans reglages.toml (réglage « theme »).
@@ -95,6 +94,16 @@ THEMES: dict[str, Theme] = {
     ),
 }
 THEME = THEMES["sombre"]
+# Thèmes de la fenêtre → thème de la console (qui n'en a que trois).
+THEME_CONSOLE = {
+    "graphite": "sombre",
+    "minuit": "doux",
+    "emeraude": "doux",
+    "amethyste": "sombre",
+    "clair": "sombre",
+    "daltonien": "daltonien",
+    "systeme": "sombre",
+}
 
 # Pour chaque statut : symbole, libellé, couleur.
 APPARENCE: dict[Statut, tuple[str, str, str]] = {
@@ -108,6 +117,8 @@ APPARENCE: dict[Statut, tuple[str, str, str]] = {
     Statut.CODE_NPSSO: ("▲", "CODE NPSSO À CHANGER", "erreur"),
     Statut.LISTE_PLEINE: ("■", "LISTE D'AMIS PLEINE", "erreur"),
     Statut.ERREUR: ("▲", "ERREUR", "erreur"),
+    Statut.CONNEXION_REQUISE: ("◌", "CONNEXION PSN NÉCESSAIRE", "alerte"),
+    Statut.SUPPRESSION: ("●", "GESTION DES AMIS", "info"),
 }
 STATUTS_ANIMES = (Statut.DEMARRAGE, Statut.CONNEXION, Statut.VERIFICATION)
 
@@ -1354,7 +1365,7 @@ def lancer(
 ) -> str:
     """Affiche le tableau de bord jusqu'à ce que l'utilisateur quitte ; renvoie la raison."""
     reglages = moteur.REGLAGES
-    console = Console(theme=THEMES.get(reglages.theme, THEME))
+    console = Console(theme=THEMES.get(THEME_CONSOLE.get(reglages.theme, ""), THEME))
     interface = EtatInterface(son=reglages.son)
     titre_actuel = ""
     with (

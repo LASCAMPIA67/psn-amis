@@ -5,18 +5,11 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import asdict
-from pathlib import Path
 
 import pytest
 import requests
 
-import coffre
-import mises_a_jour
-import notifications
-import reglages
-
-RACINE = Path(__file__).resolve().parents[1]
-EXEMPLE = RACINE / "reglages.exemple.toml"
+from psn_amis import coffre, mises_a_jour, notifications, reglages
 
 # Les vraies fonctions, gardées avant que les tests ne les remplacent.
 VRAI_LIRE, VRAI_ECRIRE, VRAI_EFFACER = coffre.lire, coffre.ecrire, coffre.effacer
@@ -32,15 +25,15 @@ def test_fichier_absent_valeurs_par_defaut(tmp_path):
     assert problemes == []
 
 
-def test_l_exemple_donne_les_valeurs_par_defaut(tmp_path):
-    # L'exemple documente chaque réglage avec sa vraie valeur par défaut.
+def test_le_fichier_cree_donne_les_valeurs_par_defaut(tmp_path):
+    # Le fichier créé documente chaque réglage avec sa vraie valeur par défaut.
     cible = tmp_path / "reglages.toml"
-    assert reglages.creer_si_absent(cible, EXEMPLE)
-    assert not reglages.creer_si_absent(cible, EXEMPLE)
+    assert reglages.creer_si_absent(cible)
+    assert not reglages.creer_si_absent(cible)
     lus, problemes = reglages.charger(cible)
     assert problemes == []
     assert lus == reglages.Reglages()
-    texte = EXEMPLE.read_text(encoding="utf-8")
+    texte = cible.read_text(encoding="utf-8")
     for nom in asdict(reglages.Reglages()):
         assert f"\n{nom} = " in texte
 
@@ -55,7 +48,8 @@ def test_valeurs_lues(tmp_path):
     lus, problemes = reglages.charger(fichier)
     assert problemes == []
     assert lus.intervalle_verification == 30
-    assert lus.theme == "doux"
+    # Ancien nom de thème (2.x) : repris sous son nouveau nom.
+    assert lus.theme == "minuit"
     assert lus.son is True
     assert lus.liste_noire == ["Spam"]
     assert lus.pause_entre_acceptations == 0.5
@@ -68,8 +62,11 @@ def test_valeurs_lues(tmp_path):
         ("intervalle_verification = true", "nombre"),
         ('intervalle_verification = "15"', "nombre"),
         ('notifications = "oui"', "true ou false"),
-        ('theme = "rose"', "sombre, doux ou daltonien"),
+        ('theme = "rose"', "daltonien ou systeme"),
         ("theme = 3", "texte"),
+        ("intervalle_verification = 7.5", "entier"),
+        ('nettoyage_mode = "toujours"', "manuel, assiste ou automatique"),
+        ('nettoyage_heures = "25-3"', "02-07"),
         ('liste_noire = "Spam"', "liste"),
         ("reglage_invente = 1", "inconnu"),
     ],

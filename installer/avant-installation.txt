@@ -1,0 +1,13 @@
+PSN Amis accepte automatiquement les demandes d'amis que reçoit votre compte PlayStation, et vous aide à gérer votre liste d'amis.
+
+À savoir avant d'installer :
+
+- PSN Amis est un projet indépendant, sans lien avec Sony Interactive Entertainment ni PlayStation.
+
+- Il utilise PSNAWP, une bibliothèque qui passe par une API PlayStation non officielle. Sony peut la modifier à tout moment, et une utilisation intensive pourrait enfreindre ses conditions d'utilisation. Utilisez PSN Amis à un rythme raisonnable : aucune garantie de compatibilité ni d'absence de sanction n'est possible.
+
+- Pour connecter votre compte, PSN Amis vous demandera votre code « npsso ». Il est gardé dans le Gestionnaire d'identification de Windows, jamais affiché ni envoyé ailleurs que chez Sony.
+
+- Aucune télémétrie : PSN Amis ne contacte que les serveurs de Sony, et GitHub pour vérifier les mises à jour si vous l'autorisez.
+
+- L'installation ne demande pas de droits administrateur. Vos données (réglages, journal, amis protégés) sont rangées dans %LOCALAPPDATA%\PSN Amis et conservées lors des mises à jour.

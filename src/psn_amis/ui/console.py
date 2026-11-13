@@ -1,0 +1,192 @@
+"""Console intégrée : les événements du moteur en temps réel, comme dans la console Rich.
+
+Chaque ligne a une heure, un symbole, une couleur et un niveau. On peut chercher,
+filtrer, copier, exporter, et effacer l'affichage (le journal sur disque n'est jamais
+touché). La mémoire est bornée : au-delà de MAXIMUM messages, les plus anciens sortent.
+Quand on remonte lire d'anciens messages, l'affichage ne saute plus en bas.
+"""
+
+from __future__ import annotations
+
+import html
+import logging
+from collections import deque
+from pathlib import Path
+
+from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLineEdit,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from psn_amis.ui import composants
+from psn_amis.ui.commun import Message, apparence
+from psn_amis.ui.theme import Palette
+
+MAXIMUM = 5000
+
+FILTRES = {
+    "Tous les événements": lambda m: True,
+    "Ajouts et suppressions": lambda m: (
+        m.genre in ("ajout", "retrait", "suppression") or m.genre == "operation"
+    ),
+    "Avertissements et erreurs": lambda m: m.niveau >= logging.WARNING,
+    "Erreurs seulement": lambda m: m.niveau >= logging.ERROR,
+}
+
+
+class Console(QWidget):
+    def __init__(self, palette: Palette, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._palette = palette
+        self._messages: deque[Message] = deque(maxlen=MAXIMUM)
+        # Index du premier message encore affiché (après « Effacer l'affichage »).
+        self._efface_jusqu_a = 0
+        self._total = 0
+
+        self.recherche = QLineEdit()
+        self.recherche.setPlaceholderText("Rechercher dans l'activité (Ctrl+F)")
+        self.recherche.setClearButtonEnabled(True)
+        self.recherche.setAccessibleName("Rechercher dans l'activité")
+        self.recherche.textChanged.connect(self.reafficher)
+        self.filtre = QComboBox()
+        self.filtre.addItems(list(FILTRES))
+        self.filtre.setToolTip("N'afficher qu'une partie des événements")
+        self.filtre.currentIndexChanged.connect(self.reafficher)
+        self.details = composants.Interrupteur("Détails")
+        self.details.setToolTip(
+            "Affiche les détails techniques des erreurs (le code npsso reste masqué)."
+        )
+        self.details.toggled.connect(self.reafficher)
+
+        copier = composants.bouton("Copier", "copier", "plat")
+        copier.setToolTip("Copie la sélection, ou tout ce qui est affiché")
+        copier.clicked.connect(self.copier)
+        effacer = composants.bouton("Effacer l'affichage", "effacer", "plat")
+        effacer.setToolTip("Vide cet écran ; le journal enregistré n'est pas touché")
+        effacer.clicked.connect(self.effacer_affichage)
+        exporter = composants.bouton("Exporter…", "exporter", "plat")
+        exporter.setToolTip("Enregistre les événements affichés dans un fichier texte")
+        exporter.clicked.connect(self.exporter)
+
+        barre = QHBoxLayout()
+        barre.setSpacing(8)
+        barre.addWidget(self.recherche, 3)
+        barre.addWidget(self.filtre, 2)
+        outils = QHBoxLayout()
+        outils.setSpacing(6)
+        outils.addWidget(self.details)
+        outils.addStretch(1)
+        for b in (copier, effacer, exporter):
+            outils.addWidget(b)
+
+        # Texte enrichi : retraits suspendus (les lignes longues restent alignées
+        # après l'heure) ; mémoire bornée par le nombre de paragraphes.
+        self.texte = QTextEdit()
+        self.texte.setReadOnly(True)
+        self.texte.setAcceptRichText(True)
+        self.texte.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.texte.document().setMaximumBlockCount(MAXIMUM)
+        self.texte.setAccessibleName("Activité du moteur")
+        self.texte.setUndoRedoEnabled(False)
+        police = self.texte.font()
+        police.setFamilies(["Cascadia Mono", "Consolas", "Courier New", "monospace"])
+        self.texte.setFont(police)
+
+        disposition = QVBoxLayout(self)
+        disposition.setContentsMargins(0, 0, 0, 0)
+        disposition.addLayout(barre)
+        disposition.addLayout(outils)
+        disposition.addWidget(self.texte)
+        QShortcut(QKeySequence.StandardKey.Find, self, self.recherche.setFocus)
+
+    # ─── Données ───
+
+    def ajouter(self, message: Message) -> None:
+        self._messages.append(message)
+        self._total += 1
+        if not self._visible(message):
+            return
+        barre = self.texte.verticalScrollBar()
+        en_bas = barre.value() >= barre.maximum() - 4
+        position = barre.value()
+        self.texte.append(self._ligne(message))
+        if en_bas:
+            barre.setValue(barre.maximum())
+        else:
+            # L'utilisateur lit d'anciens messages : on ne le déplace pas.
+            barre.setValue(position)
+
+    def messages_affiches(self) -> list[Message]:
+        debut = max(0, self._efface_jusqu_a - (self._total - len(self._messages)))
+        return [m for m in list(self._messages)[debut:] if self._visible(m)]
+
+    def changer_palette(self, palette: Palette) -> None:
+        self._palette = palette
+        self.reafficher()
+
+    # ─── Affichage ───
+
+    def _visible(self, message: Message) -> bool:
+        if not FILTRES[self.filtre.currentText()](message):
+            return False
+        cherche = self.recherche.text().strip().casefold()
+        return not cherche or cherche in message.texte.casefold()
+
+    def _retrait(self) -> int:
+        """Largeur de « HH:MM:SS ✖ » : les lignes suivantes s'alignent après."""
+        return self.texte.fontMetrics().horizontalAdvance("00:00:00 ✖ ") + 2
+
+    def _ligne(self, message: Message) -> str:
+        symbole, cle = apparence(message)
+        couleur = getattr(self._palette, cle, self._palette.texte)
+        heure = message.moment.strftime("%H:%M:%S")
+        texte = html.escape(message.texte).replace("\n", "<br>")
+        graisse = "font-weight:600;" if message.niveau >= logging.ERROR else ""
+        retrait = self._retrait()
+        ligne = (
+            f'<p style="margin:0 0 4px {retrait}px; text-indent:-{retrait}px; '
+            f'line-height:125%;">'
+            f'<span style="color:{self._palette.tertiaire}">{heure}</span> '
+            f'<span style="color:{couleur};{graisse}"><b>{symbole}</b> {texte}</span>'
+        )
+        if message.detail and self.details.isChecked():
+            detail = html.escape(message.detail).replace("\n", "<br>")
+            ligne += f'<br><span style="color:{self._palette.discret}">{detail}</span>'
+        return ligne + "</p>"
+
+    def reafficher(self) -> None:
+        self.texte.clear()
+        lignes = [self._ligne(m) for m in self.messages_affiches()]
+        if lignes:
+            self.texte.setHtml("".join(lignes))
+        self.texte.moveCursor(QTextCursor.MoveOperation.End)
+
+    def effacer_affichage(self) -> None:
+        self._efface_jusqu_a = self._total
+        self.texte.clear()
+
+    def en_texte(self) -> str:
+        return "\n".join(
+            f"{m.moment:%Y-%m-%d %H:%M:%S}  {m.texte}" for m in self.messages_affiches()
+        )
+
+    def copier(self) -> None:
+        if self.texte.textCursor().hasSelection():
+            self.texte.copy()
+            return
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.clipboard().setText(self.en_texte())
+
+    def exporter(self) -> None:
+        chemin, _ = QFileDialog.getSaveFileName(
+            self, "Exporter l'activité", "activite-psn-amis.txt", "Texte (*.txt)"
+        )
+        if chemin:
+            Path(chemin).write_text(self.en_texte() + "\n", encoding="utf-8")

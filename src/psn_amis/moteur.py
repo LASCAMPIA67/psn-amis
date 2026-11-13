@@ -8,7 +8,8 @@ Sécurité :
   affiché ni écrit dans journal.txt ;
 - seuls les serveurs de Sony (sony.com, playstation.com, playstation.net) sont contactés,
   sauf la vérification de version sur GitHub, coupée au départ ;
-- le script ne retire jamais d'amis.
+- le moteur ne retire jamais d'amis de lui-même : les suppressions sont demandées
+  par l'utilisateur ou par un nettoyage qu'il a activé (voir gestion.py).
 """
 
 from __future__ import annotations
@@ -50,17 +51,16 @@ from psnawp_api.models import User
 from psnawp_api.utils import API_PATH, BASE_PATH
 from requests.adapters import HTTPAdapter
 
-import coffre
-import mises_a_jour
-import notifications
-import reglages as reglages_module
+from psn_amis import __version__, chemins, coffre, mises_a_jour, notifications, psn
+from psn_amis import demandes as types_demandes
+from psn_amis import reglages as reglages_module
 
-# Version du programme (la même que dans pyproject.toml et CHANGELOG.md).
-VERSION = "2.5.0"
+# Version du programme (définie dans psn_amis/__init__.py).
+VERSION = __version__
 
 # ─── Réglages ─────────────────────────────────────────────────────────────────
 # Les réglages ci-dessous sont les valeurs par défaut ; reglages.toml peut en changer
-# certains (voir reglages.exemple.toml). Les autres sont fixés ici.
+# certains (voir reglages.py). Les autres sont fixés ici.
 
 # Secondes entre deux vérifications. À chaque fois : demandes reçues acceptées, puis
 # liste d'amis recomptée (pour repérer les amis retirés).
@@ -99,12 +99,12 @@ ESSAIS_AVANT_ALERTE = 3
 REGLAGES = reglages_module.Reglages()
 
 # ─── Fichiers et adresses ─────────────────────────────────────────────────────
-DOSSIER = Path(__file__).resolve().parent
+# Dossier des données de l'utilisateur (voir chemins.py), séparé du programme.
+DOSSIER = chemins.dossier_donnees()
 FICHIER_NPSSO = DOSSIER / "npsso.txt"
 FICHIER_JOURNAL = DOSSIER / "journal.txt"
-FICHIER_VERROU = DOSSIER / "accepter_amis.lock"
+FICHIER_VERROU = DOSSIER / "psn-amis.lock"
 FICHIER_REGLAGES = DOSSIER / "reglages.toml"
-FICHIER_REGLAGES_EXEMPLE = DOSSIER / "reglages.exemple.toml"
 # Les amis connus au dernier comptage : les retraits survenus pendant l'arrêt sont
 # ainsi repérés au démarrage suivant.
 FICHIER_AMIS = DOSSIER / "amis.json"
@@ -119,9 +119,8 @@ ETAPES_CODE_NPSSO = f"""\
   3. Double-cliquez sur le code de 64 caractères et copiez-le (Ctrl+C)."""
 AIDE_NPSSO = f"""Pour mettre un nouveau code npsso :
 {ETAPES_CODE_NPSSO}
-  4. Dans PSN Amis, appuyez sur C, puis collez le code (Ctrl+V) et validez avec Entrée.
-     Sans le tableau de bord : « accepter_amis.py --configurer », ou mettez le code
-     dans npsso.txt avec le Bloc-notes (dossier {DOSSIER}).
+  4. Dans PSN Amis, cliquez sur « Changer le code » (console : touche C), collez le
+     code (Ctrl+V) et validez.
   Attention : si votre écran est partagé ou enregistré, le code y serait visible."""
 
 # ─── Journal (journal.txt + écran), avec masquage du code npsso ───────────────
@@ -134,6 +133,8 @@ GENRE_RETRAIT = "retrait"
 GENRE_AIDE = "aide"
 # « Toujours actif » : inutile quand le tableau de bord est affiché.
 GENRE_RAPPEL = "rappel"
+# Ami supprimé par PSN Amis (gestion des amis).
+GENRE_SUPPRESSION = "suppression"
 
 ECRAN_SEULEMENT = {"ecran_seulement": True}
 AIDE = {"ecran_seulement": True, "genre": GENRE_AIDE}
@@ -161,6 +162,15 @@ class SansMessagesEcran(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         return not getattr(record, "ecran_seulement", False)
+
+
+def preparer_dossier() -> Path:
+    """Crée le dossier des données s'il n'existe pas (premier lancement).
+
+    Appelée avant chaque première écriture (verrou, journal, réglages, amis.json...) :
+    aucune opération ne suppose que le dossier existe déjà.
+    """
+    return chemins.preparer(DOSSIER)
 
 
 def configurer_journal(*, ecran: bool, fichier: bool, diagnostic: bool = False) -> None:
@@ -196,9 +206,14 @@ def configurer_journal(*, ecran: bool, fichier: bool, diagnostic: bool = False) 
         )
         journal.addHandler(gestionnaire)
 
+    if fichier or diagnostic:
+        preparer_dossier()
     if fichier:
         gestionnaire = logging.handlers.RotatingFileHandler(
-            FICHIER_JOURNAL, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+            FICHIER_JOURNAL,
+            maxBytes=1_000_000,
+            backupCount=REGLAGES.journaux_archives,
+            encoding="utf-8",
         )
         gestionnaire.setLevel(logging.INFO)
         gestionnaire.setFormatter(
@@ -235,7 +250,9 @@ def appliquer_reglages(nouveaux: reglages_module.Reglages) -> None:
 
 def charger_reglages() -> tuple[reglages_module.Reglages, list[str]]:
     """Crée reglages.toml au besoin, le lit et l'applique ; renvoie (réglages, problèmes)."""
-    reglages_module.creer_si_absent(FICHIER_REGLAGES, FICHIER_REGLAGES_EXEMPLE)
+    preparer_dossier()
+    reglages_module.creer_si_absent(FICHIER_REGLAGES)
+    reglages_module.mettre_a_jour_le_format(FICHIER_REGLAGES)
     charges, problemes = reglages_module.charger(FICHIER_REGLAGES)
     appliquer_reglages(charges)
     return charges, problemes
@@ -267,6 +284,8 @@ def raison(erreur: PSNAWPError) -> str:
 # ─── Windows : une seule fenêtre à la fois, priorité basse ────────────────────
 def verrouiller_instance() -> IO[str] | None:
     """Empêche de lancer le script deux fois en même temps (requêtes doublées)."""
+    # Premier lancement : le dossier des données n'existe peut-être pas encore.
+    FICHIER_VERROU.parent.mkdir(parents=True, exist_ok=True)
     # Le fichier reste ouvert exprès : c'est lui qui sert de verrou.
     fichier = FICHIER_VERROU.open("a+", encoding="utf-8")
     if os.name == "nt":
@@ -346,8 +365,11 @@ class Statut(StrEnum):
     HORS_LIGNE = "hors ligne"
     ATTENTE = "attente"
     CODE_NPSSO = "code npsso"
+    # Aucun code configuré : il faut connecter un compte (premier lancement).
+    CONNEXION_REQUISE = "connexion requise"
     LISTE_PLEINE = "liste pleine"
     ERREUR = "erreur"
+    SUPPRESSION = "gestion des amis"
 
 
 @dataclass(frozen=True)
@@ -401,6 +423,9 @@ class Instantane:
     probleme_npsso: str | None
     # Heure du dernier comptage des amis auprès de Sony.
     amis_comptes_a: datetime | None
+    # Amis supprimés par PSN Amis (gestion des amis).
+    supprimes_session: int = 0
+    supprimes_jour: int = 0
 
 
 class Suivi:
@@ -410,6 +435,7 @@ class Suivi:
         self,
         ajouts_recents: list[Ajout] | None = None,
         retraits_recents: list[Ajout] | None = None,
+        suppressions_recentes: list[Ajout] | None = None,
     ) -> None:
         ajouts = sorted(ajouts_recents or [], key=lambda ajout: ajout.moment)
         retraits = sorted(retraits_recents or [], key=lambda retrait: retrait.moment)
@@ -434,6 +460,10 @@ class Suivi:
         self._derniere_verification: datetime | None = None
         self._probleme_npsso: str | None = None
         self._amis_comptes_a: datetime | None = None
+        self._supprimes_session = 0
+        self._supprimes_jour = sum(
+            s.moment.date() == self._jour for s in suppressions_recentes or []
+        )
 
     def statut(
         self, statut: Statut, detail: str = "", prochaine_dans: float | None = None
@@ -461,6 +491,14 @@ class Suivi:
             self._nombre_amis = nombre
             self._amis_comptes_a = datetime.now()
             return avant
+
+    def connexion_requise(self, texte: str) -> None:
+        """Aucun code enregistré : ce n'est pas une erreur, il faut connecter un compte."""
+        with self._verrou:
+            self._statut = Statut.CONNEXION_REQUISE
+            self._detail = "Connectez votre compte PSN pour commencer"
+            self._prochaine = None
+            self._probleme_npsso = masquer(texte)
 
     def code_a_changer(self, texte: str) -> None:
         with self._verrou:
@@ -510,6 +548,15 @@ class Suivi:
                 self._retraits_jour += 1
             self._retraits.appendleft(Ajout(moment, pseudo))
 
+    def suppression(self, pseudo: str) -> None:
+        """Un ami supprimé par PSN Amis (il n'est pas compté comme « retrait »)."""
+        with self._verrou:
+            self._changer_de_jour_si_besoin(date.today())
+            self._supprimes_session += 1
+            self._supprimes_jour += 1
+            if self._nombre_amis is not None and self._nombre_amis > 0:
+                self._nombre_amis -= 1
+
     def evenement(self, moment: datetime, niveau: int, genre: str, texte: str) -> None:
         with self._verrou:
             self._evenements.appendleft(Evenement(moment, niveau, genre, texte))
@@ -537,6 +584,8 @@ class Suivi:
                 derniere_verification=self._derniere_verification,
                 probleme_npsso=self._probleme_npsso,
                 amis_comptes_a=self._amis_comptes_a,
+                supprimes_session=self._supprimes_session,
+                supprimes_jour=self._supprimes_jour,
             )
 
     def _changer_de_jour_si_besoin(self, jour: date) -> None:
@@ -544,10 +593,11 @@ class Suivi:
             self._jour = jour
             self._ajouts_jour = 0
             self._retraits_jour = 0
+            self._supprimes_jour = 0
 
 
 class Commandes:
-    """Ordres envoyés au moteur depuis le clavier : pause, vérification, arrêt."""
+    """Ordres envoyés au moteur (clavier ou fenêtre) : pause, vérification, arrêt."""
 
     def __init__(self) -> None:
         self.arret = threading.Event()
@@ -589,6 +639,9 @@ class Commandes:
 MOTIF_AJOUT = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Demande acceptée : (.+)$"
 )
+MOTIF_SUPPRESSION = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Ami supprimé par PSN Amis : (.+)$"
+)
 MOTIF_RETRAIT = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Ami retiré(?: pendant l'arrêt)? : (.+)$"
 )
@@ -598,7 +651,7 @@ def fichiers_journal() -> list[Path]:
     """journal.txt et ses archives, de la plus ancienne à la plus récente."""
     return [
         FICHIER_JOURNAL.with_name(f"{FICHIER_JOURNAL.name}.{numero}")
-        for numero in (3, 2, 1)
+        for numero in range(REGLAGES.journaux_archives, 0, -1)
     ] + [FICHIER_JOURNAL]
 
 
@@ -623,6 +676,11 @@ def _dans_journal(motif: re.Pattern[str], depuis: datetime) -> list[Ajout]:
 def ajouts_recents_dans_journal(heures: int = HEURES_RELUES) -> list[Ajout]:
     """Les ajouts des dernières heures, relus dans journal.txt au démarrage."""
     return _dans_journal(MOTIF_AJOUT, datetime.now() - timedelta(hours=heures))
+
+
+def suppressions_recentes_dans_journal(heures: int = HEURES_RELUES) -> list[Ajout]:
+    """Les amis supprimés par PSN Amis ces dernières heures (relus au démarrage)."""
+    return _dans_journal(MOTIF_SUPPRESSION, datetime.now() - timedelta(hours=heures))
 
 
 def retraits_recents_dans_journal(heures: int = HEURES_RELUES) -> list[Ajout]:
@@ -661,6 +719,10 @@ def statistiques_par_jour(jours: int = 7) -> list[tuple[date, int, int]]:
 # ─── Code npsso ───────────────────────────────────────────────────────────────
 class ProblemeNpsso(Exception):
     """Le code npsso est absent, illisible ou mal formé."""
+
+
+class AucunCode(ProblemeNpsso):
+    """Aucun code npsso n'a encore été configuré (compte pas encore connecté)."""
 
 
 def extraire_npsso(texte: str, origine: str) -> str:
@@ -706,8 +768,8 @@ def _lire_fichier_npsso() -> str:
     try:
         brut = FICHIER_NPSSO.read_bytes()
     except FileNotFoundError:
-        raise ProblemeNpsso(
-            f"le fichier npsso.txt est introuvable dans {DOSSIER}."
+        raise AucunCode(
+            f"aucun code enregistré (npsso.txt introuvable dans {DOSSIER})."
         ) from None
     except OSError:
         raise ProblemeNpsso("Windows refuse d'ouvrir npsso.txt.") from None
@@ -743,7 +805,7 @@ def lire_npsso() -> str:
         return code
     depuis_le_coffre = coffre.lire()
     if not depuis_le_coffre:
-        raise ProblemeNpsso(
+        raise AucunCode(
             "aucun code enregistré (ni dans le coffre de Windows, ni dans npsso.txt)."
         )
     return extraire_npsso(depuis_le_coffre, "le code du coffre de Windows")
@@ -781,6 +843,7 @@ def enregistrer_npsso(saisie: str) -> str:
         # L'ancien fichier, s'il existe, passerait avant le coffre : il est retiré.
         FICHIER_NPSSO.unlink(missing_ok=True)
         return "le coffre de Windows"
+    FICHIER_NPSSO.parent.mkdir(parents=True, exist_ok=True)
     FICHIER_NPSSO.write_text(code + "\n", encoding="utf-8")
     proteger_fichier(FICHIER_NPSSO)
     return "npsso.txt"
@@ -852,6 +915,8 @@ def attendre_nouveau_code(commandes: Commandes, duree_max: float) -> None:
 class Connexion:
     psnawp: PSNAWP
     pseudo: str
+    # Identifiant de compte PSN (stable, contrairement au pseudo).
+    compte_id: str = ""
 
     def expire_bientot(self) -> bool:
         auth = self.psnawp.authenticator
@@ -886,9 +951,16 @@ class Connexion:
 def ouvrir_connexion(npsso: str) -> Connexion:
     psnawp = PSNAWP(npsso)
     installer_protections(psnawp)
-    # Première requête : c'est là que Sony vérifie le code.
-    pseudo = psnawp.me().online_id
-    return Connexion(psnawp, pseudo)
+    # Première requête : c'est là que Sony vérifie le code. L'identifiant du compte
+    # est demandé au passage par PSNAWP (aucune requête de plus).
+    moi = psnawp.me()
+    pseudo = moi.online_id
+    return Connexion(psnawp, pseudo, moi.account_id)
+
+
+def client_psn(connexion: Connexion) -> psn.ClientPSN:
+    """Les opérations de gestion des amis pour cette connexion."""
+    return psn.ClientPSNAWP(connexion.psnawp)
 
 
 def connecter(suivi: Suivi, commandes: Commandes, attendre: bool) -> Connexion | None:
@@ -899,8 +971,12 @@ def connecter(suivi: Suivi, commandes: Commandes, attendre: bool) -> Connexion |
     while not commandes.arret.is_set():
         suivi.statut(Statut.CONNEXION, "Connexion aux serveurs de Sony…")
         journal.info("Connexion aux serveurs de Sony...", extra=ECRAN_SEULEMENT)
+        aucun_code = False
         try:
             connexion = ouvrir_connexion(lire_npsso())
+        except AucunCode as probleme:
+            aucun_code = True
+            texte = f"Connexion PSN nécessaire : {probleme}"
         except ProblemeNpsso as probleme:
             texte = f"PROBLÈME avec le code npsso : {probleme}"
         except PSNAWPAuthenticationError:
@@ -908,10 +984,15 @@ def connecter(suivi: Suivi, commandes: Commandes, attendre: bool) -> Connexion |
         else:
             suivi.code_valide()
             return connexion
-        journal.error("%s", texte)
-        suivi.code_a_changer(texte)
+        if aucun_code:
+            # Premier lancement : rien d'anormal, pas de bulle d'alerte Windows.
+            journal.warning("%s", texte)
+            suivi.connexion_requise(texte)
+        else:
+            journal.error("%s", texte)
+            suivi.code_a_changer(texte)
         journal.info(AIDE_NPSSO, extra=AIDE)
-        if not deja_alerte:
+        if not deja_alerte and not aucun_code:
             deja_alerte = True
             alerter("PSN Amis : code npsso à changer", texte)
         if not attendre:
@@ -945,6 +1026,11 @@ class Demandes:
     partages: list[str]
     # Compte -> moment où la demande a été envoyée (quand Sony le donne).
     depuis: dict[str, datetime] = field(default_factory=dict)
+    # Demandes d'ami accompagnées d'une demande de partage du vrai nom : jamais
+    # acceptées automatiquement.
+    avec_vrai_nom: list[str] = field(default_factory=list)
+    # Demandes d'un type que PSN Amis ne connaît pas.
+    inconnues: list[str] = field(default_factory=list)
 
 
 def _moment_sony(texte: object) -> datetime | None:
@@ -972,21 +1058,27 @@ def demandes_recues(connexion: Connexion) -> Demandes:
     reponse = connexion.psnawp.authenticator.get(
         url=f"{BASE_PATH['profile_uri']}{adresse}",
     ).json()
-    amis: list[str] = []
-    partages: list[str] = []
+    triees: dict[types_demandes.TypeDemande, list[str]] = {
+        sorte: [] for sorte in types_demandes.TypeDemande
+    }
     depuis: dict[str, datetime] = {}
     for demande in reponse.get("receivedRequests", []):
-        compte = demande.get("accountId")
-        if not compte:
+        if not isinstance(demande, dict):
             continue
-        if demande.get("relation") == "friend":
-            partages.append(compte)
-        else:
-            amis.append(compte)
-            moment = _moment_sony(demande.get("requestedDate"))
-            if moment is not None:
-                depuis[compte] = moment
-    return Demandes(amis, partages, depuis)
+        compte = demande.get("accountId")
+        if not compte or not isinstance(compte, str):
+            continue
+        triees[types_demandes.classer(demande)].append(compte)
+        moment = _moment_sony(demande.get("requestedDate"))
+        if moment is not None:
+            depuis[compte] = moment
+    return Demandes(
+        triees[types_demandes.TypeDemande.ORDINAIRE],
+        triees[types_demandes.TypeDemande.AMI_PROCHE],
+        depuis,
+        triees[types_demandes.TypeDemande.AVEC_VRAI_NOM],
+        triees[types_demandes.TypeDemande.NON_RECONNUE],
+    )
 
 
 def trouver_joueur(connexion: Connexion, compte: str) -> User:
@@ -1050,6 +1142,12 @@ class Etat:
     ignores_signales: set[str] = field(default_factory=set)
     # Ajouts depuis la dernière reprise, pour la pause automatique.
     ajouts_depuis_reprise: int = 0
+    # Gestion des amis (gestion.Gestion), si l'application l'utilise.
+    gestion: Any = None
+    # Demandes laissées en attente à cause de leur type, déjà signalées.
+    types_signales: set[str] = field(default_factory=set)
+    # Refus impossible des demandes d'ami proche : signalé une seule fois.
+    refus_proche_signale: bool = False
 
 
 def joueur(connexion: Connexion, etat: Etat, compte: str) -> User:
@@ -1058,6 +1156,8 @@ def joueur(connexion: Connexion, etat: Etat, compte: str) -> User:
     if trouve is None:
         trouve = trouver_joueur(connexion, compte)
         etat.joueurs[compte] = trouve
+        if etat.gestion is not None:
+            etat.gestion.nommer(compte, trouve.online_id)
     return trouve
 
 
@@ -1087,10 +1187,61 @@ def signaler_partages(connexion: Connexion, etat: Etat, partages: list[str]) -> 
             continue
         etat.partages_signales.add(compte)
         journal.info(
-            "%s (déjà votre ami) demande à partager vos vrais noms : le script n'y "
-            "touche pas. Répondez vous-même sur la console si vous le souhaitez.",
+            "%s (déjà votre ami) envoie une demande d'ami proche (partage des vrais "
+            "noms) : PSN Amis n'y touche pas. Répondez-y vous-même sur la console "
+            "ou l'appli PlayStation si vous le souhaitez.",
             joueur(connexion, etat, compte).online_id,
         )
+
+
+def signaler_types(connexion: Connexion, etat: Etat, demandes: Demandes) -> None:
+    """Signale une fois chaque demande laissée en attente à cause de son type."""
+    if (
+        demandes.partages
+        and REGLAGES.refuser_demandes_ami_proche
+        and not etat.refus_proche_signale
+    ):
+        etat.refus_proche_signale = True
+        journal.warning("%s", types_demandes.EXPLICATION_REFUS_AMI_PROCHE)
+    for compte in demandes.avec_vrai_nom:
+        if compte in etat.types_signales:
+            continue
+        etat.types_signales.add(compte)
+        journal.info(
+            "Demande de %s laissée en attente : elle demande aussi à partager vos vrais "
+            "noms (ami proche). Répondez-y vous-même.",
+            joueur(connexion, etat, compte).online_id,
+        )
+    if REGLAGES.demandes_non_reconnues == "accepter":
+        return
+    for compte in demandes.inconnues:
+        if compte in etat.types_signales:
+            continue
+        etat.types_signales.add(compte)
+        journal.warning(
+            "Demande de %s laissée en attente : type de demande non reconnu par PSN "
+            "Amis (réglage « Demandes d'un type non reconnu »).",
+            joueur(connexion, etat, compte).online_id,
+        )
+
+
+def refuser_liste_noire(connexion: Connexion, etat: Etat, compte: str) -> bool:
+    """Refuse la demande d'un joueur de la liste noire ; True si c'est fait.
+
+    Vérifie d'abord auprès de Sony qu'il n'est pas déjà ami : l'opération de refus
+    supprimerait sinon l'amitié.
+    """
+    client = client_psn(connexion)
+    try:
+        if client.relation(compte).est_ami:
+            return False
+        client.refuser(compte)
+    except ERREURS_A_REMONTER:
+        raise
+    except (PSNAWPError, psn.ReponseInattendue, requests.RequestException) as erreur:
+        journal.debug("Refus impossible pour %s : %s", compte, erreur)
+        return False
+    return True
 
 
 def signaler_liste_pleine(etat: Etat, nombre: int) -> None:
@@ -1154,19 +1305,37 @@ def verifier_demandes(
     }
     demandes = demandes_recues(connexion)
     signaler_partages(connexion, etat, demandes.partages)
+    signaler_types(connexion, etat, demandes)
+    candidats = list(demandes.amis)
+    if REGLAGES.demandes_non_reconnues == "accepter":
+        candidats += demandes.inconnues
 
-    # Listes noire et blanche de reglages.toml.
+    # Listes noire et blanche des réglages.
     retenus: list[str] = []
-    for compte in demandes.amis:
+    for compte in candidats:
         pseudo = joueur(connexion, etat, compte).online_id
         motif = motif_ignore(pseudo, compte)
         if motif is None:
             retenus.append(compte)
         elif compte not in etat.ignores_signales:
             etat.ignores_signales.add(compte)
-            journal.info("Demande de %s ignorée (%s).", pseudo, motif)
+            if (
+                motif == "liste noire"
+                and REGLAGES.liste_noire_refuser
+                and refuser_liste_noire(connexion, etat, compte)
+            ):
+                journal.info("Demande de %s refusée (liste noire).", pseudo)
+            else:
+                journal.info("Demande de %s ignorée (%s).", pseudo, motif)
     suivi.demandes_trouvees(len(retenus))
     comptes = [compte for compte in retenus if compte not in etat.mis_de_cote]
+    if not REGLAGES.acceptation_auto:
+        suivi.en_attente(
+            attentes(
+                connexion, etat, demandes, retenus, "acceptation automatique coupée"
+            )
+        )
+        return
     suivi.en_attente(attentes(connexion, etat, demandes, retenus, ""))
 
     if not comptes:
@@ -1214,6 +1383,8 @@ def verifier_demandes(
         if etat.amis_connus is not None:
             etat.amis_connus.add(compte)
         suivi.ajout(demandeur.online_id)
+        if etat.gestion is not None:
+            etat.gestion.accepte(compte, demandeur.online_id)
         journal.info(
             "Demande acceptée : %s", demandeur.online_id, extra={"genre": GENRE_AJOUT}
         )
@@ -1235,6 +1406,10 @@ def recompter_amis(connexion: Connexion, etat: Etat, suivi: Suivi) -> None:
     retires = []
     if etat.amis_connus is not None and complete:
         retires = sorted(etat.amis_connus - amis)
+    if etat.gestion is not None:
+        # Les amis supprimés par PSN Amis ne sont pas des « retraits » inconnus.
+        retires = etat.gestion.filtrer_retraits(retires)
+        etat.gestion.observer(amis, complete)
 
     for compte in retires[:NOMBRE_MAX_RETRAITS_DETAILLES]:
         pseudo = joueur(connexion, etat, compte).online_id
@@ -1268,6 +1443,7 @@ def memoriser_amis(compte: str, amis: set[str]) -> None:
         "amis": sorted(amis),
     }
     try:
+        FICHIER_AMIS.parent.mkdir(parents=True, exist_ok=True)
         FICHIER_AMIS.write_text(json.dumps(contenu), encoding="utf-8")
     except OSError as erreur:
         journal.debug("amis.json impossible à écrire : %s", erreur)
@@ -1344,8 +1520,51 @@ def attentes_en_pause(connexion: Connexion, etat: Etat, suivi: Suivi) -> None:
         journal.debug("Lecture des demandes en pause impossible : %s", erreur)
 
 
-def tourner_en_continu(etat: Etat, suivi: Suivi, commandes: Commandes) -> None:
-    """Vérifie et accepte les demandes jusqu'à l'arrêt. Ne s'arrête jamais tout seul."""
+def outils_de_gestion(
+    connexion: Connexion, etat: Etat, suivi: Suivi, commandes: Commandes
+) -> Any:
+    """Ce que le moteur prête à la gestion des amis pendant qu'elle travaille."""
+    from psn_amis.gestion import Outils
+
+    def supprime(compte: str, nom: str) -> None:
+        if etat.amis_connus is not None:
+            etat.amis_connus.discard(compte)
+        suivi.suppression(nom)
+        journal.info(
+            "Ami supprimé par PSN Amis : %s", nom, extra={"genre": GENRE_SUPPRESSION}
+        )
+
+    return Outils(
+        client=client_psn(connexion),
+        rafraichir=connexion.renouveler_acces_si_besoin,
+        arret=commandes.arret.is_set,
+        supprime=supprime,
+        alerter=alerter,
+    )
+
+
+def faire_travailler_la_gestion(
+    connexion: Connexion, etat: Etat, suivi: Suivi, commandes: Commandes
+) -> None:
+    """Opérations demandées depuis l'onglet Amis, puis nettoyage automatique."""
+    if etat.gestion is None or commandes.arret.is_set():
+        return
+    vue_avant = etat.gestion.vue()
+    if vue_avant.en_file:
+        suivi.statut(Statut.SUPPRESSION, vue_avant.tache or "Gestion des amis…")
+    etat.gestion.travailler(outils_de_gestion(connexion, etat, suivi, commandes))
+
+
+def tourner_en_continu(
+    etat: Etat, suivi: Suivi, commandes: Commandes, gestion: Any = None
+) -> None:
+    """Vérifie et accepte les demandes jusqu'à l'arrêt. Ne s'arrête jamais tout seul.
+
+    `gestion` (gestion.Gestion) ajoute la gestion des amis : ses opérations passent
+    par ce même fil, entre deux vérifications.
+    """
+    if gestion is not None:
+        etat.gestion = gestion
     connexion: Connexion | None = None
     erreurs_de_suite = 0
     dernier_rappel = time.monotonic()
@@ -1357,6 +1576,15 @@ def tourner_en_continu(etat: Etat, suivi: Suivi, commandes: Commandes) -> None:
                 suivi.statut(Statut.PAUSE, "Les demandes attendent · P : reprendre")
                 if connexion is not None:
                     attentes_en_pause(connexion, etat, suivi)
+                    # La gestion des amis reste possible pendant la pause.
+                    try:
+                        faire_travailler_la_gestion(connexion, etat, suivi, commandes)
+                    except (requests.RequestException, PSNAWPError) as erreur:
+                        journal.warning("Gestion des amis interrompue : %s", erreur)
+                    if commandes.pause.is_set():
+                        suivi.statut(
+                            Statut.PAUSE, "Les demandes attendent · P : reprendre"
+                        )
                 commandes.attendre(INTERVALLE_VERIFICATION)
                 continue
             if en_pause:
@@ -1380,8 +1608,12 @@ def tourner_en_continu(etat: Etat, suivi: Suivi, commandes: Commandes) -> None:
                     if connexion is None:
                         break
                     etat.joueurs.clear()
+                    if etat.gestion is not None:
+                        etat.gestion.connecte(connexion.compte_id, connexion.pseudo)
                     amis, total_amis = liste_amis(connexion)
                     complete = len(amis) >= total_amis
+                    if etat.gestion is not None:
+                        etat.gestion.observer(amis, complete)
                     suivi.connecte(connexion.pseudo, total_amis)
                     journal.info(
                         "Connecté au compte PSN %s (%s). "
@@ -1400,6 +1632,7 @@ def tourner_en_continu(etat: Etat, suivi: Suivi, commandes: Commandes) -> None:
                 verifier_demandes(connexion, etat, suivi, commandes)
                 recompter_amis(connexion, etat, suivi)
                 suivi.verification_terminee()
+                faire_travailler_la_gestion(connexion, etat, suivi, commandes)
                 erreurs_de_suite = 0
                 if etat.liste_pleine:
                     statut_suivant = Statut.LISTE_PLEINE

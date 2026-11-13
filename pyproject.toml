@@ -1,7 +1,7 @@
 [project]
 name = "psn-amis"
-version = "2.5.0"
-description = "Accepte automatiquement les demandes d'amis PlayStation Network, avec un tableau de bord en couleur dans la console."
+version = "3.0.0"
+description = "Application Windows qui accepte automatiquement les demandes d'amis PlayStation Network et aide à gérer la liste d'amis."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -13,13 +13,15 @@ keywords = [
     "psnawp",
     "demandes-d-amis",
     "automatisation",
-    "console",
+    "qt",
     "rich",
     "windows",
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
     "Natural Language :: French",
     "Operating System :: Microsoft :: Windows",
@@ -33,6 +35,9 @@ classifiers = [
 dependencies = [
     # Le script utilise quelques éléments internes de PSNAWP : on reste sur la série 3.1.
     "psnawp>=3.1.0,<3.2",
+    # Interface Windows (Qt Widgets). Seul le paquet « Essentials » est utilisé :
+    # PySide6 complet ajouterait WebEngine, inutile ici et très lourd.
+    "pyside6-essentials>=6.12.0,<6.13",
     "rich>=15.0.0,<16",
 ]
 
@@ -46,6 +51,10 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.4",
 ]
+# Compilation de l'application Windows (outils/construire.py).
+construction = [
+    "pyinstaller>=6.22.3,<7",
+]
 
 [tool.uv]
 # Application lancée telle quelle (pas une bibliothèque à installer).
@@ -53,7 +62,7 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 addopts = "-q"
 
 [tool.ruff]
@@ -86,6 +95,11 @@ ignore = [
 # assert est la façon normale d'écrire un test pytest ; les tests de lancement
 # démarrent le programme dans un autre processus.
 "tests/**" = ["S101", "S603"]
+# Fixtures de la fenêtre partagées avec test_interface.py.
+"tests/test_apparence.py" = ["F811"]
+"tests/test_recette.py" = ["F811"]
+# Chaque réglage est déclaré par une fonction qui renvoie un field() de dataclass.
+"src/psn_amis/reglages.py" = ["RUF009"]
 
 [tool.ruff.lint.pycodestyle]
 # Le code est mis en forme sur 88 colonnes ; les textes et commentaires

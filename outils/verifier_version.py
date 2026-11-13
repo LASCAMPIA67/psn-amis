@@ -1,5 +1,5 @@
-"""Vérifie que la version est la même partout : moteur.py, pyproject.toml, CHANGELOG.md,
-et l'étiquette Git lors d'une publication.
+"""Vérifie que la version est la même partout : src/psn_amis/__init__.py (la source),
+pyproject.toml, CHANGELOG.md, et l'étiquette Git lors d'une publication.
 
 Depuis le dossier du projet :
 
@@ -23,12 +23,16 @@ def version_pyproject() -> str:
     return projet["project"]["version"]
 
 
-def version_moteur() -> str:
-    texte = (RACINE / "moteur.py").read_text(encoding="utf-8")
-    correspondance = re.search(r'^VERSION = "([^"]+)"', texte, re.MULTILINE)
+def version_code() -> str:
+    """La version déclarée dans src/psn_amis/__init__.py (seule source de vérité)."""
+    texte = (RACINE / "src" / "psn_amis" / "__init__.py").read_text(encoding="utf-8")
+    correspondance = re.search(r'^__version__ = "([^"]+)"', texte, re.MULTILINE)
     if correspondance is None:
-        raise SystemExit('moteur.py : la ligne VERSION = "..." est introuvable.')
-    return correspondance.group(1)
+        raise SystemExit('__init__.py : la ligne __version__ = "..." est introuvable.')
+    version = correspondance.group(1)
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise SystemExit(f"__init__.py : « {version} » n'est pas une version X.Y.Z.")
+    return version
 
 
 def derniere_version_changelog() -> tuple[str, str]:
@@ -56,7 +60,7 @@ def main() -> int:
     choix = parametres.parse_args()
 
     versions = {
-        "moteur.py": version_moteur(),
+        "__init__.py": version_code(),
         "pyproject.toml": version_pyproject(),
         "CHANGELOG.md": derniere_version_changelog()[0],
     }
@@ -69,7 +73,9 @@ def main() -> int:
             print(f"  {source:<16} {version}")
         return 1
     print(
-        f"Version {versions['moteur.py']} : " + ", ".join(versions) + " sont d'accord."
+        f"Version {versions['__init__.py']} : "
+        + ", ".join(versions)
+        + " sont d'accord."
     )
     return 0
 

@@ -5,9 +5,9 @@ title PSN Amis
 cd /d "%~dp0"
 
 rem ================================================================
-rem  PSN Amis : double-cliquez sur ce fichier pour lancer
-rem  l'acceptation automatique des demandes d'amis PSN.
-rem  Pour arrêter : touche Q deux fois, ou fermez la fenêtre.
+rem  PSN Amis depuis le code source (développement) : double-cliquez
+rem  sur ce fichier. Pour une utilisation normale, installez plutôt
+rem  PSN Amis avec PSN-Amis-Setup-x.y.z.exe (aucun outil à installer).
 rem ================================================================
 
 rem Avec uv : installe Python et les bibliothèques la première fois, puis les met
@@ -31,7 +31,10 @@ echo Installez-le depuis https://docs.astral.sh/uv/ puis relancez ce fichier.
 goto :attendre
 
 :lancer
-".venv\Scripts\python.exe" accepter_amis.py %*
+rem La fenêtre de l'application s'ouvre ; ajoutez --console pour le tableau de bord
+rem en couleur des versions 2.x. Les données sont dans %LOCALAPPDATA%\PSN Amis.
+set "PYTHONPATH=%~dp0src"
+".venv\Scripts\python.exe" -m psn_amis %*
 if errorlevel 1 goto :erreur
 exit /b 0
 

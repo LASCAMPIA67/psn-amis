@@ -7,22 +7,37 @@ remplacé par un faux serveur en mémoire.
 
 from __future__ import annotations
 
+import os
+import tempfile
+
+# Avant tout import de psn_amis : jamais le vrai dossier des données
+# (%LOCALAPPDATA%\PSN Amis), même par erreur.
+os.environ["PSN_AMIS_DONNEES"] = tempfile.mkdtemp(prefix="psn-amis-tests-")
+
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pytest
 import requests
 
-import coffre
-import moteur
-import notifications
-import reglages
-import tableau_de_bord
+from psn_amis import coffre, moteur, notifications, reglages, tableau_de_bord
 
 # Un code au bon format, inventé pour les tests.
 FAUX_CODE = ("Ab3" * 22)[:64]
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Rendu hors écran (CI) : sans dossier de polices, Qt prend une police de
+    secours aux dimensions sans rapport avec celles de Windows, et les mesures de
+    mise en page (boutons tronqués, largeurs) n'ont plus de sens. On lui donne les
+    polices de Windows, celles qu'utilise la vraie fenêtre (avant toute création de
+    l'application Qt)."""
+    polices = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    if polices.is_dir():
+        os.environ.setdefault("QT_QPA_FONTDIR", str(polices))
 
 
 def attendre_que(condition: Callable[[], bool], delai: float = 10.0) -> bool:
@@ -97,7 +112,7 @@ def dossier(tmp_path, monkeypatch):
     monkeypatch.setattr(moteur, "DOSSIER", tmp_path)
     monkeypatch.setattr(moteur, "FICHIER_NPSSO", tmp_path / "npsso.txt")
     monkeypatch.setattr(moteur, "FICHIER_JOURNAL", tmp_path / "journal.txt")
-    monkeypatch.setattr(moteur, "FICHIER_VERROU", tmp_path / "accepter_amis.lock")
+    monkeypatch.setattr(moteur, "FICHIER_VERROU", tmp_path / "psn-amis.lock")
     monkeypatch.setattr(moteur, "FICHIER_AMIS", tmp_path / "amis.json")
     monkeypatch.setattr(moteur, "FICHIER_REGLAGES", tmp_path / "reglages.toml")
     monkeypatch.setattr(moteur, "FICHIER_DIAGNOSTIC", tmp_path / "diagnostic.txt")
@@ -196,3 +211,19 @@ def moteur_en_marche(faux_sony):
     commandes.arreter()
     fil.join(5)
     moteur.journal.removeHandler(gestionnaire)
+
+
+@pytest.fixture(autouse=True)
+def dialogues(monkeypatch) -> list[tuple[str, str]]:
+    """Aucun dialogue de PSN Amis ne bloque un test : il est noté, puis refusé
+    (« Annuler »), comme si l'utilisateur ne confirmait pas."""
+    from psn_amis.ui import composants
+
+    vus: list[tuple[str, str]] = []
+
+    def exec_(dialogue) -> int:
+        vus.append((dialogue.titre.text(), dialogue.texte.text()))
+        return 0
+
+    monkeypatch.setattr(composants.Dialogue, "exec", exec_)
+    return vus

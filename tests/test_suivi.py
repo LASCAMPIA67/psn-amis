@@ -7,7 +7,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-import moteur
+from psn_amis import moteur
 
 
 def test_compteurs_du_suivi():
