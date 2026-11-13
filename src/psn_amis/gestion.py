@@ -144,6 +144,7 @@ class Gestion:
         # Comptes supprimés par PSN Amis : leur disparition n'est pas un « retrait ».
         self._supprimes: set[str] = set()
         self._version = 0
+        self._vue: Vue | None = None
 
     # ─── Appelé par le moteur ───
 
@@ -247,8 +248,12 @@ class Gestion:
         if pseudo.startswith("(pseudo inconnu"):
             return
         with self._verrou:
-            if self._compte is not None:
+            if (
+                self._compte is not None
+                and self._compte.registre.pseudo(compte) != pseudo
+            ):
                 self._compte.registre.nommer(compte, pseudo)
+                self._changer()
 
     def filtrer_retraits(self, comptes: list[str]) -> list[str]:
         """Retire des « amis disparus » ceux que PSN Amis a lui-même supprimés."""
@@ -279,6 +284,9 @@ class Gestion:
 
     def vue(self) -> Vue:
         with self._verrou:
+            # Rien n'a changé depuis la dernière photo : elle est réutilisée.
+            if self._vue is not None and self._vue.version == self._version:
+                return self._vue
             compte = self._compte
             lignes: tuple[LigneAmi, ...] = ()
             proteges: tuple[Protection, ...] = ()
@@ -301,7 +309,7 @@ class Gestion:
                     )
                 lignes = tuple(construites)
                 proteges = tuple(compte.protections.toutes())
-            return Vue(
+            self._vue = Vue(
                 version=self._version,
                 compte=compte.identifiant if compte else None,
                 pseudo_compte=compte.pseudo if compte else None,
@@ -317,6 +325,7 @@ class Gestion:
                 proposition=self._proposition,
                 pseudos_manquants=manquants,
             )
+            return self._vue
 
     def version(self) -> int:
         with self._verrou:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -47,6 +47,9 @@ PAGES = (
 
 
 class Fenetre(QMainWindow):
+    # Réglages changés depuis un autre fil (moteur) : remis au fil de l'interface.
+    reglages_modifies = Signal(object)
+
     def __init__(
         self,
         controleur: Controleur,
@@ -138,9 +141,8 @@ class Fenetre(QMainWindow):
 
         self.zone: QSystemTrayIcon | None = None
         self.appliquer_reglages(controleur.reglages)
-        controleur.reglages_changes = lambda r: QTimer.singleShot(
-            0, lambda: self.appliquer_reglages(r)
-        )
+        self.reglages_modifies.connect(self._reglages_modifies)
+        controleur.reglages_changes = self.reglages_modifies.emit
 
         self.navigation.currentRowChanged.connect(lambda _: self.actualiser())
         self.navigation.setCurrentRow(0)
@@ -319,6 +321,13 @@ class Fenetre(QMainWindow):
             return
         self.controleur.appliquer(nouveaux)
         self.reglages_page.recharger()
+
+    def _reglages_modifies(self, nouveaux: Reglages) -> None:
+        self.appliquer_reglages(nouveaux)
+        # Changement venu d'ailleurs (arrêt du nettoyage par le moteur...) : le
+        # formulaire est remis à jour s'il n'est pas sous les yeux de l'utilisateur.
+        if self.pages.currentIndex() != 4:
+            self.reglages_page.recharger()
 
     def appliquer_reglages(self, nouveaux: Reglages) -> None:
         palette = theme.palette(nouveaux.theme)

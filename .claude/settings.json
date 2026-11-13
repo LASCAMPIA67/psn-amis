@@ -2,7 +2,13 @@
   "permissions": {
     "deny": [
       "Read(./npsso*)",
-      "Edit(./npsso*)"
+      "Edit(./npsso*)",
+      "Read(**/npsso*)",
+      "Edit(**/npsso*)",
+      "Read(~/AppData/Local/PSN Amis/**)",
+      "Edit(~/AppData/Local/PSN Amis/**)",
+      "Bash(cmdkey *)",
+      "PowerShell(cmdkey *)"
     ]
   }
 }

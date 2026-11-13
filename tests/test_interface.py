@@ -322,3 +322,19 @@ def test_quitter_pendant_une_suppression_demande_confirmation(
     assert questions == ["Quitter PSN Amis"]
     assert fenetre.isVisible()
     gestion.annuler()
+
+
+def test_nettoyage_coupe_par_le_moteur_visible_dans_la_fenetre(fenetre):
+    controleur = fenetre.controleur
+    automatique, _ = reglages.modifier(
+        controleur.reglages, nettoyage_mode="automatique"
+    )
+    assert controleur.appliquer(automatique).enregistre
+    fenetre.reglages_page.recharger()
+    # Comme le moteur quand il détecte un cycle : depuis un autre fil que l'interface.
+    fil = threading.Thread(target=controleur._couper_nettoyage, args=("cycle",))
+    fil.start()
+    fil.join(5)
+    assert controleur.reglages.nettoyage_mode == "manuel"
+    champ = fenetre.reglages_page.champs["nettoyage_mode"]
+    assert attendre_qt(lambda: champ.currentData() == "manuel")
