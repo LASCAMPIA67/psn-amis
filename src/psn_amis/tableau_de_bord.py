@@ -94,6 +94,16 @@ THEMES: dict[str, Theme] = {
     ),
 }
 THEME = THEMES["sombre"]
+# Thèmes de la fenêtre → thème de la console (qui n'en a que trois).
+THEME_CONSOLE = {
+    "graphite": "sombre",
+    "minuit": "doux",
+    "emeraude": "doux",
+    "amethyste": "sombre",
+    "clair": "sombre",
+    "daltonien": "daltonien",
+    "systeme": "sombre",
+}
 
 # Pour chaque statut : symbole, libellé, couleur.
 APPARENCE: dict[Statut, tuple[str, str, str]] = {
@@ -1353,7 +1363,7 @@ def lancer(
 ) -> str:
     """Affiche le tableau de bord jusqu'à ce que l'utilisateur quitte ; renvoie la raison."""
     reglages = moteur.REGLAGES
-    console = Console(theme=THEMES.get(reglages.theme, THEME))
+    console = Console(theme=THEMES.get(THEME_CONSOLE.get(reglages.theme, ""), THEME))
     interface = EtatInterface(son=reglages.son)
     titre_actuel = ""
     with (

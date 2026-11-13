@@ -102,7 +102,7 @@ def test_fermeture(fenetre):
 def test_pause_et_reprise(fenetre):
     fenetre.pause()
     assert fenetre.controleur.en_pause()
-    assert fenetre.action_pause.text() == "▶ Reprendre"
+    assert fenetre.action_pause.text() == "Reprendre"
     assert attendre_qt(lambda: "pause" in fenetre.tableau.statut.text().lower())
     fenetre.pause()
     assert not fenetre.controleur.en_pause()
@@ -296,7 +296,7 @@ def test_code_invalide_explique(application, dossier, sans_coffre):
 def test_assistant_applique_les_premiers_reglages(application):
     appliques: list[reglages.Reglages] = []
     assistant = Assistant(reglages.Reglages(), appliques.append)
-    assistant.theme.setCurrentText("clair")
+    assistant.theme.setCurrentIndex(assistant.theme.findData("clair"))
     assistant.accept()
     assert appliques[0].theme == "clair"
     assert appliques[0].verifier_mises_a_jour is True

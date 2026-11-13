@@ -48,7 +48,8 @@ def test_valeurs_lues(tmp_path):
     lus, problemes = reglages.charger(fichier)
     assert problemes == []
     assert lus.intervalle_verification == 30
-    assert lus.theme == "doux"
+    # Ancien nom de thème (2.x) : repris sous son nouveau nom.
+    assert lus.theme == "minuit"
     assert lus.son is True
     assert lus.liste_noire == ["Spam"]
     assert lus.pause_entre_acceptations == 0.5
@@ -61,7 +62,7 @@ def test_valeurs_lues(tmp_path):
         ("intervalle_verification = true", "nombre"),
         ('intervalle_verification = "15"', "nombre"),
         ('notifications = "oui"', "true ou false"),
-        ('theme = "rose"', "sombre, doux, daltonien ou clair"),
+        ('theme = "rose"', "daltonien ou systeme"),
         ("theme = 3", "texte"),
         ("intervalle_verification = 7.5", "entier"),
         ('nettoyage_mode = "toujours"', "manuel, assiste ou automatique"),

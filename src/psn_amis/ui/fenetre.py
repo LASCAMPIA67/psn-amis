@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QCloseEvent, QIcon, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QMainWindow,
     QMenu,
     QMessageBox,
-    QStackedWidget,
+    QPushButton,
     QSystemTrayIcon,
-    QToolBar,
+    QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -26,24 +30,58 @@ from psn_amis import __version__, chemins, migration, mises_a_jour, moteur, syst
 from psn_amis.controleur import Controleur, EtatMoteur
 from psn_amis.mises_a_jour import Publication
 from psn_amis.reglages import Reglages
-from psn_amis.ui import theme
+from psn_amis.ui import composants, icones, theme
 from psn_amis.ui.amis import PageAmis
 from psn_amis.ui.apropos import FenetreMiseAJour, PageAPropos
 from psn_amis.ui.assistant import FenetreCode
 from psn_amis.ui.commun import STATUTS, Message, PontJournal, Tache
+from psn_amis.ui.composants import (
+    Animations,
+    Notifications,
+    Pages,
+    Pastille,
+    etiquette,
+)
 from psn_amis.ui.console import Console
 from psn_amis.ui.demandes import PageDemandes
 from psn_amis.ui.reglages import PageReglages
 from psn_amis.ui.tableau import TableauDeBord
 
+# (nom, raccourci, icône, sous-titre de l'en-tête)
 PAGES = (
-    ("Tableau de bord", "Ctrl+1"),
-    ("Activité", "Ctrl+2"),
-    ("Amis", "Ctrl+3"),
-    ("Demandes", "Ctrl+4"),
-    ("Paramètres", "Ctrl+5"),
-    ("À propos", "Ctrl+6"),
+    (
+        "Tableau de bord",
+        "Ctrl+1",
+        "tableau",
+        "Votre compte et le moteur, en un coup d'œil",
+    ),
+    ("Activité", "Ctrl+2", "activite", "Tout ce que fait PSN Amis, en temps réel"),
+    (
+        "Amis",
+        "Ctrl+3",
+        "amis",
+        "Consulter, protéger et faire de la place dans votre liste",
+    ),
+    ("Demandes", "Ctrl+4", "demandes", "Demandes reçues et règles d'acceptation"),
+    (
+        "Paramètres",
+        "Ctrl+5",
+        "parametres",
+        "Apparence, moteur, demandes, amis et application",
+    ),
+    ("À propos", "Ctrl+6", "apropos", "Version, mises à jour et confidentialité"),
 )
+# Icône de chaque commande (recolorée selon le thème).
+ICONES_ACTIONS = {
+    "action_demarrer": "jouer",
+    "action_arreter": "arreter",
+    "action_pause": "pause",
+    "action_verifier": "actualiser",
+    "action_reconnecter": "lien",
+    "action_redemarrer": "redemarrer",
+    "action_relancer": "redemarrer",
+    "action_quitter": "quitter",
+}
 
 
 class Fenetre(QMainWindow):
@@ -66,8 +104,9 @@ class Fenetre(QMainWindow):
         self._quitter_pour_de_bon = False
         self.setWindowTitle(f"PSN Amis {__version__}")
         self.setWindowIcon(icone)
-        self.resize(1180, 760)
-        self.setMinimumSize(820, 560)
+        self.resize(1240, 800)
+        self.setMinimumSize(900, 600)
+        self._dernier_toast = 0.0
         nom_theme = controleur.reglages.theme
         palette = theme.palette(nom_theme)
 
@@ -90,43 +129,105 @@ class Fenetre(QMainWindow):
                 "migrer": self.reprendre_anciennes_donnees,
             },
             verrous,
+            changer_apparence=self._changer_apparence,
         )
         self.apropos = PageAPropos(self.rechercher_mise_a_jour, moteur.DOSSIER)
 
-        self.navigation = QListWidget()
-        self.navigation.setObjectName("navigation")
-        self.navigation.setFixedWidth(190)
-        self.navigation.setAccessibleName("Navigation")
-        self.pages = QStackedWidget()
-        for (nom, raccourci), page in zip(
-            PAGES,
-            (
-                self.tableau,
-                self.console,
-                self.amis,
-                self.demandes,
-                self.reglages_page,
-                self.apropos,
-            ),
-            strict=True,
+        self.pages = Pages()
+        self._boutons_nav: list[QPushButton] = []
+        self._groupe_nav = QButtonGroup(self)
+        self._groupe_nav.setExclusive(True)
+
+        laterale = QFrame()
+        laterale.setObjectName("laterale")
+        laterale.setFixedWidth(236)
+        nav = QVBoxLayout(laterale)
+        nav.setContentsMargins(14, 18, 14, 14)
+        nav.setSpacing(4)
+        self.logo = QLabel()
+        self.logo.setFixedSize(38, 38)
+        self.logo.setAccessibleName("PSN Amis")
+        marque = QVBoxLayout()
+        marque.setSpacing(0)
+        marque.addWidget(etiquette("PSN Amis", "marque"))
+        marque.addWidget(etiquette(f"Version {__version__}", "marque_sous"))
+        ligne_marque = QHBoxLayout()
+        ligne_marque.setContentsMargins(6, 0, 0, 0)
+        ligne_marque.setSpacing(10)
+        ligne_marque.addWidget(self.logo)
+        ligne_marque.addLayout(marque, 1)
+        nav.addLayout(ligne_marque)
+        nav.addSpacing(18)
+        nav.addWidget(etiquette("NAVIGATION", "section_nav"))
+        for rang, (nom, raccourci, icone_nom, _) in enumerate(PAGES):
+            bouton = composants.bouton(nom, icone_nom, "nav")
+            bouton.setCheckable(True)
+            bouton.setToolTip(f"{nom} ({raccourci})")
+            bouton.setAccessibleName(nom)
+            bouton.setIconSize(QSize(18, 18))
+            self._groupe_nav.addButton(bouton, rang)
+            self._boutons_nav.append(bouton)
+            nav.addWidget(bouton)
+        self._groupe_nav.idClicked.connect(self.aller)
+        for page in (
+            self.tableau,
+            self.console,
+            self.amis,
+            self.demandes,
+            self.reglages_page,
+            self.apropos,
         ):
-            self.navigation.addItem(nom)
-            element = self.navigation.item(self.navigation.count() - 1)
-            element.setToolTip(f"{nom} ({raccourci})")
             conteneur = QWidget()
-            disposition = QHBoxLayout(conteneur)
-            disposition.setContentsMargins(16, 12, 16, 12)
+            conteneur.setObjectName("page")
+            disposition = QVBoxLayout(conteneur)
+            disposition.setContentsMargins(28, 18, 28, 22)
             disposition.addWidget(page)
             self.pages.addWidget(conteneur)
-        self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
+        nav.addStretch(1)
+        pied = QFrame()
+        pied.setObjectName("pied_nav")
+        disposition_pied = QVBoxLayout(pied)
+        disposition_pied.setContentsMargins(12, 10, 12, 12)
+        disposition_pied.setSpacing(6)
+        self.etat_nav = Pastille()
+        self.etat_nav.setAccessibleName("État du moteur")
+        self.compte_nav = etiquette("Aucun compte connecté", "tertiaire", True)
+        disposition_pied.addWidget(self.etat_nav, 0, Qt.AlignmentFlag.AlignLeft)
+        disposition_pied.addWidget(self.compte_nav)
+        nav.addWidget(pied)
+
+        entete = QFrame()
+        entete.setObjectName("entete")
+        disposition_entete = QHBoxLayout(entete)
+        disposition_entete.setContentsMargins(28, 16, 22, 14)
+        disposition_entete.setSpacing(8)
+        textes = QVBoxLayout()
+        textes.setSpacing(2)
+        self.titre_page = etiquette("", "titre_page")
+        self.sous_titre_page = etiquette("", "sous_titre_page")
+        textes.addWidget(self.titre_page)
+        textes.addWidget(self.sous_titre_page)
+        disposition_entete.addLayout(textes, 1)
+        self.barre_actions = QHBoxLayout()
+        self.barre_actions.setSpacing(8)
+        disposition_entete.addLayout(self.barre_actions)
+
+        droite = QWidget()
+        disposition_droite = QVBoxLayout(droite)
+        disposition_droite.setContentsMargins(0, 0, 0, 0)
+        disposition_droite.setSpacing(0)
+        disposition_droite.addWidget(entete)
+        disposition_droite.addWidget(self.pages, 1)
 
         centre = QWidget()
+        centre.setObjectName("centre")
         disposition = QHBoxLayout(centre)
         disposition.setContentsMargins(0, 0, 0, 0)
         disposition.setSpacing(0)
-        disposition.addWidget(self.navigation)
-        disposition.addWidget(self.pages, 1)
+        disposition.addWidget(laterale)
+        disposition.addWidget(droite, 1)
         self.setCentralWidget(centre)
+        self.notifications = Notifications(centre)
 
         self._creer_actions()
         self.etat_barre = QLabel()
@@ -144,8 +245,11 @@ class Fenetre(QMainWindow):
         self.reglages_modifies.connect(self._reglages_modifies)
         controleur.reglages_changes = self.reglages_modifies.emit
 
-        self.navigation.currentRowChanged.connect(lambda _: self.actualiser())
-        self.navigation.setCurrentRow(0)
+        # Thème « Système » : suit Windows quand il passe du clair au sombre.
+        QApplication.instance().styleHints().colorSchemeChanged.connect(
+            self._schema_windows_change
+        )
+        self.aller(0)
         self.minuterie = QTimer(self)
         self.minuterie.setInterval(1000)
         self.minuterie.timeout.connect(self.actualiser)
@@ -173,23 +277,20 @@ class Fenetre(QMainWindow):
         return action
 
     def _creer_actions(self) -> None:
-        barre = QToolBar("Commandes")
-        barre.setMovable(False)
-        self.addToolBar(barre)
         self.action_demarrer = self._action(
-            "▶ Démarrer", "Ctrl+D", "Démarre le moteur", self.controleur.demarrer
+            "Démarrer", "Ctrl+D", "Démarre le moteur", self.controleur.demarrer
         )
         self.action_arreter = self._action(
-            "■ Arrêter",
+            "Arrêter",
             "Ctrl+Shift+D",
             "Arrête le moteur après l'opération en cours",
             self.arreter_moteur,
         )
         self.action_pause = self._action(
-            "⏸ Pause", "Ctrl+P", "Met en pause ou reprend les acceptations", self.pause
+            "Pause", "Ctrl+P", "Met en pause ou reprend les acceptations", self.pause
         )
         self.action_verifier = self._action(
-            "↻ Vérifier maintenant",
+            "Vérifier maintenant",
             "F5",
             "Vérifie les demandes et recompte les amis tout de suite",
             self.controleur.verifier_maintenant,
@@ -216,28 +317,57 @@ class Fenetre(QMainWindow):
             "Quitter", QKeySequence.StandardKey.Quit, "Ferme PSN Amis", self.quitter
         )
         self.action_quitter.setShortcut(QKeySequence("Ctrl+Q"))
-        for action in (
-            self.action_demarrer,
-            self.action_arreter,
-            self.action_pause,
-            self.action_verifier,
-            self.action_reconnecter,
+        self._boutons_actions: dict[str, QToolButton] = {}
+        for nom in (
+            "action_demarrer",
+            "action_arreter",
+            "action_pause",
+            "action_verifier",
         ):
-            barre.addAction(action)
-        barre.addSeparator()
-        for action in (
-            self.action_redemarrer,
-            self.action_relancer,
-            self.action_quitter,
-        ):
-            barre.addAction(action)
-        for rang, (_, raccourci) in enumerate(PAGES):
-            self._action(
-                PAGES[rang][0], raccourci, PAGES[rang][0], lambda r=rang: self.aller(r)
-            )
+            bouton = QToolButton()
+            bouton.setDefaultAction(getattr(self, nom))
+            bouton.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            bouton.setIconSize(QSize(16, 16))
+            bouton.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._boutons_actions[nom] = bouton
+            self.barre_actions.addWidget(bouton)
+        self.menu_plus = QMenu(self)
+        self.menu_plus.addAction(self.action_reconnecter)
+        self.menu_plus.addAction(self.action_redemarrer)
+        self.menu_plus.addAction(self.action_relancer)
+        self.menu_plus.addSeparator()
+        self.menu_plus.addAction(self.action_quitter)
+        self.bouton_plus = QToolButton()
+        self.bouton_plus.setText("Plus")
+        self.bouton_plus.setToolTip("Reconnecter, redémarrer, quitter")
+        self.bouton_plus.setAccessibleName("Plus de commandes")
+        self.bouton_plus.setMenu(self.menu_plus)
+        self.bouton_plus.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.bouton_plus.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.bouton_plus.setIconSize(QSize(18, 18))
+        self.bouton_plus.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.barre_actions.addWidget(self.bouton_plus)
+        for rang, (nom, raccourci, _, _) in enumerate(PAGES):
+            self._action(nom, raccourci, nom, lambda r=rang: self.aller(r))
 
     def aller(self, rang: int) -> None:
-        self.navigation.setCurrentRow(rang)
+        self._boutons_nav[rang].setChecked(True)
+        nom, _, _, sous_titre = PAGES[rang]
+        self.titre_page.setText(nom)
+        self.sous_titre_page.setText(sous_titre)
+        self.pages.afficher(rang)
+        self.actualiser()
+
+    def notifier(
+        self, niveau: str, titre: str, texte: str = "", duree_ms: int = 4500
+    ) -> None:
+        """Notification temporaire dans la fenêtre (rien si elle est cachée)."""
+        if self.isVisible():
+            self.notifications.afficher(niveau, titre, texte, duree_ms)
+
+    def resizeEvent(self, evenement) -> None:
+        super().resizeEvent(evenement)
+        self.notifications.replacer()
 
     def pause(self) -> None:
         self.controleur.basculer_pause()
@@ -261,10 +391,16 @@ class Fenetre(QMainWindow):
         if dialogue.saisie.enregistre:
             self.controleur.reconnecter()
             moteur.journal.info("Nouveau code npsso enregistré : reconnexion à Sony.")
+            self.notifier("succes", "Code enregistré", "Reconnexion à Sony en cours.")
 
     def arret_d_urgence(self) -> None:
         self.controleur.arret_d_urgence()
         self.reglages_page.recharger()
+        self.notifier(
+            "attention",
+            "Arrêt d'urgence",
+            "Suppressions annulées, nettoyage repassé en manuel.",
+        )
 
     def ouvrir_dossier(self) -> None:
         from PySide6.QtCore import QUrl
@@ -329,11 +465,71 @@ class Fenetre(QMainWindow):
         if self.pages.currentIndex() != 4:
             self.reglages_page.recharger()
 
+    def _changer_apparence(self, nom: str, valeur: object) -> None:
+        """Thème ou animations : enregistrés et appliqués tout de suite."""
+        from psn_amis import reglages
+
+        nouveaux, problemes = reglages.modifier(
+            self.controleur.reglages, **{nom: valeur}
+        )
+        if problemes:
+            self.notifier("erreur", "Réglage refusé", " ".join(problemes))
+            return
+        if nouveaux == self.controleur.reglages:
+            return
+        resultat = self.controleur.appliquer(nouveaux)
+        if not resultat.enregistre:
+            self.notifier(
+                "erreur", "Réglage non enregistré", " ".join(resultat.problemes)
+            )
+            return
+        self.appliquer_reglages(nouveaux)
+        if nom == "theme":
+            self.notifier(
+                "succes", "Thème appliqué", theme.NOMS.get(str(valeur), ""), 2500
+            )
+
+    def _dessiner_marque(self, palette: theme.Palette) -> None:
+        """La marque PSN Amis : manette blanche sur un carré arrondi à l'accent."""
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPixmap
+
+        densite = self.devicePixelRatioF() or 1.0
+        cote = 38
+        image = QPixmap(round(cote * densite), round(cote * densite))
+        image.setDevicePixelRatio(densite)
+        image.fill(Qt.GlobalColor.transparent)
+        peintre = QPainter(image)
+        peintre.setRenderHint(QPainter.RenderHint.Antialiasing)
+        degrade = QLinearGradient(0, 0, cote, cote)
+        degrade.setColorAt(0, QColor(palette.accent_survol))
+        degrade.setColorAt(1, QColor(palette.accent_presse))
+        peintre.setPen(Qt.PenStyle.NoPen)
+        peintre.setBrush(degrade)
+        peintre.drawRoundedRect(QRectF(0, 0, cote, cote), 11, 11)
+        peintre.drawPixmap(
+            7, 7, icones.pixmap("manette", palette.sur_accent, 24, densite)
+        )
+        peintre.end()
+        self.logo.setPixmap(image)
+
+    def _schema_windows_change(self, *_: object) -> None:
+        if self.controleur.reglages.theme == "systeme":
+            self.appliquer_reglages(self.controleur.reglages)
+
     def appliquer_reglages(self, nouveaux: Reglages) -> None:
-        palette = theme.palette(nouveaux.theme)
-        QApplication.instance().setStyleSheet(theme.feuille_de_style(nouveaux.theme))
+        Animations.definir(nouveaux.animations)
+        composants.changer_theme_courant(nouveaux.theme)
+        palette = theme.appliquer(QApplication.instance(), nouveaux.theme)
         self.tableau.changer_palette(palette)
         self.console.changer_palette(palette)
+        composants.recolorer(self)
+        for nom, icone_nom in ICONES_ACTIONS.items():
+            getattr(self, nom).setIcon(
+                icones.icone(icone_nom, palette.texte, 16, desactivee=palette.tertiaire)
+            )
+        self.bouton_plus.setIcon(icones.icone("plus", palette.texte, 18))
+        self._dessiner_marque(palette)
         if systeme.demarrage_possible() and (
             systeme.demarre_avec_windows() != nouveaux.demarrage_windows
         ):
@@ -406,6 +602,20 @@ class Fenetre(QMainWindow):
 
     def _message(self, message: Message) -> None:
         self.console.ajouter(message)
+        self.tableau.ajouter_evenement(message)
+        # Avertissements et erreurs : aussi en notification (une toutes les 8 s au
+        # plus, pour ne jamais submerger l'écran).
+        if (
+            message.niveau >= logging.WARNING
+            and time.monotonic() - self._dernier_toast > 8
+        ):
+            self._dernier_toast = time.monotonic()
+            niveau = "erreur" if message.niveau >= logging.ERROR else "attention"
+            titre = "Erreur" if niveau == "erreur" else "Attention"
+            texte = (
+                message.texte if len(message.texte) < 160 else message.texte[:157] + "…"
+            )
+            self.notifier(niveau, titre, texte, 6000)
 
     def avertissements(self, instant: moteur.Instantane) -> list[tuple[str, str]]:
         resultat: list[tuple[str, str]] = [
@@ -460,10 +670,32 @@ class Fenetre(QMainWindow):
         reglages = self.controleur.reglages
         self.action_demarrer.setEnabled(etat is EtatMoteur.ARRETE)
         self.action_arreter.setEnabled(etat is EtatMoteur.EN_MARCHE)
-        self.action_pause.setText("▶ Reprendre" if en_pause else "⏸ Pause")
+        texte_pause = "Reprendre" if en_pause else "Pause"
+        if self.action_pause.text() != texte_pause:
+            p = composants.palette_courante()
+            self.action_pause.setText(texte_pause)
+            self.action_pause.setIcon(
+                icones.icone("jouer" if en_pause else "pause", p.texte, 16)
+            )
+        self._boutons_actions["action_demarrer"].setVisible(etat is EtatMoteur.ARRETE)
+        self._boutons_actions["action_arreter"].setVisible(
+            etat is not EtatMoteur.ARRETE
+        )
         self.action_verifier.setEnabled(etat is EtatMoteur.EN_MARCHE)
         self.action_reconnecter.setEnabled(etat is EtatMoteur.EN_MARCHE)
-        symbole, _, libelle = STATUTS[instant.statut]
+        symbole, cle, libelle = STATUTS[instant.statut]
+        if etat is EtatMoteur.EN_MARCHE:
+            self.etat_nav.afficher(
+                "En pause" if en_pause else libelle, "attention" if en_pause else cle
+            )
+        else:
+            self.etat_nav.afficher(f"Moteur {etat.value}", "discret")
+        composants.changer_texte(
+            self.compte_nav,
+            f"Compte : {instant.pseudo_compte}"
+            if instant.pseudo_compte
+            else "Aucun compte connecté",
+        )
         texte = (
             f"{symbole} {libelle} · {instant.detail}"
             if etat is EtatMoteur.EN_MARCHE

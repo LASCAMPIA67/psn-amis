@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
     QProgressBar,
-    QPushButton,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -21,7 +20,9 @@ from PySide6.QtWidgets import (
 
 from psn_amis import __version__, chemins, mises_a_jour
 from psn_amis.mises_a_jour import ErreurMiseAJour, Publication
+from psn_amis.ui import composants
 from psn_amis.ui.commun import Tache, etiquette
+from psn_amis.ui.composants import Bandeau
 
 DEPOT = f"https://github.com/{mises_a_jour.DEPOT}"
 AVERTISSEMENT = (
@@ -151,7 +152,7 @@ class PageAPropos(QWidget):
     ) -> None:
         super().__init__(parent)
         self.etat = etiquette("Mises à jour : pas encore vérifiées.", retour_ligne=True)
-        verifier = QPushButton("Rechercher une mise à jour")
+        verifier = composants.bouton("Rechercher une mise à jour", "mise_a_jour")
         verifier.setObjectName("principal")
         verifier.clicked.connect(rechercher)
         liens = QHBoxLayout()
@@ -160,17 +161,21 @@ class PageAPropos(QWidget):
             ("Notes de version", f"{DEPOT}/releases"),
             ("Signaler un problème", f"{DEPOT}/issues"),
         ):
-            bouton = QPushButton(libelle)
+            bouton = composants.bouton(libelle, "lien", "plat")
             bouton.clicked.connect(lambda _=False, a=adresse: ouvrir(a))
             liens.addWidget(bouton)
-        donnees = QPushButton("Ouvrir le dossier des données et du journal")
+        donnees = composants.bouton(
+            "Dossier des données et du journal", "dossier", "plat"
+        )
         donnees.clicked.connect(
             lambda: ouvrir(QUrl.fromLocalFile(str(dossier_donnees)).toString())
         )
         liens.addWidget(donnees)
         liens.addStretch(1)
         disposition = QVBoxLayout(self)
-        disposition.addWidget(etiquette("À propos de PSN Amis", "titre"))
+        disposition.setContentsMargins(0, 0, 0, 0)
+        disposition.setSpacing(12)
+        disposition.addWidget(etiquette("PSN Amis", "titre"))
         disposition.addWidget(
             etiquette(
                 f"Version {__version__} · Python {sys.version.split()[0]} · "
@@ -184,7 +189,7 @@ class PageAPropos(QWidget):
                 retour_ligne=True,
             )
         )
-        disposition.addWidget(etiquette(AVERTISSEMENT, "bandeau_attention", True))
+        disposition.addWidget(Bandeau("attention", AVERTISSEMENT))
         disposition.addWidget(
             etiquette(
                 "Confidentialité : aucune télémétrie. PSN Amis ne contacte que les "

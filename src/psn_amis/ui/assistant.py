@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from psn_amis import moteur, reglages
 from psn_amis.reglages import Reglages
+from psn_amis.ui import theme as theme_ui
 from psn_amis.ui.apropos import AVERTISSEMENT
 from psn_amis.ui.commun import Tache, etiquette
 
@@ -216,8 +217,9 @@ class Assistant(QWizard):
         )
         self.mises_a_jour.setChecked(True)
         self.theme = QComboBox()
-        self.theme.addItems(list(reglages.THEMES))
-        self.theme.setCurrentText(actuels.theme)
+        for cle in theme_ui.ORDRE:
+            self.theme.addItem(theme_ui.NOMS[cle], cle)
+        self.theme.setCurrentIndex(max(0, self.theme.findData(actuels.theme)))
         disposition = QVBoxLayout(configuration)
         for widget in (self.acceptation, self.notifications, self.mises_a_jour):
             disposition.addWidget(widget)
@@ -248,7 +250,7 @@ class Assistant(QWizard):
             acceptation_auto=self.acceptation.isChecked(),
             notifications=self.notifications.isChecked(),
             verifier_mises_a_jour=self.mises_a_jour.isChecked(),
-            theme=self.theme.currentText(),
+            theme=self.theme.currentData(),
         )
         if not problemes:
             self._appliquer(nouveaux)

@@ -6,9 +6,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QHBoxLayout,
-    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,7 +16,9 @@ from PySide6.QtWidgets import (
 from psn_amis import demandes as types_demandes
 from psn_amis.moteur import Instantane
 from psn_amis.reglages import Reglages
-from psn_amis.ui.commun import date_courte, etiquette
+from psn_amis.ui import composants
+from psn_amis.ui.commun import date_courte
+from psn_amis.ui.composants import Bandeau, EtatVide, Interrupteur
 
 EXPLICATIONS = (
     "Demandes ordinaires : acceptées automatiquement si l'option est cochée "
@@ -37,14 +37,14 @@ class PageDemandes(QWidget):
     ) -> None:
         super().__init__(parent)
         self._changer = changer_reglage
-        self.acceptation = QCheckBox("Accepter automatiquement les demandes d'amis")
+        self.acceptation = Interrupteur("Accepter automatiquement les demandes d'amis")
         self.acceptation.setToolTip(
             "Décochez pour laisser les demandes en attente sans les accepter."
         )
         self.acceptation.toggled.connect(
             lambda coche: self._changer("acceptation_auto", coche)
         )
-        reglages_demandes = QPushButton("Listes noire et blanche…")
+        reglages_demandes = composants.bouton("Listes noire et blanche…", "liste")
         reglages_demandes.setToolTip("Ouvre les paramètres des demandes")
         reglages_demandes.clicked.connect(ouvrir_reglages)
 
@@ -54,8 +54,12 @@ class PageDemandes(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.setAccessibleName("Demandes d'amis en attente")
-        self.vide = etiquette(
-            "Aucune demande en attente pour l'instant.", "discret", retour_ligne=True
+        self.table.setVisible(False)
+        self.vide = EtatVide(
+            "demandes",
+            "Aucune demande en attente",
+            "Les demandes d'amis reçues apparaîtront ici. Avec l'acceptation "
+            "automatique, elles sont acceptées à la vérification suivante.",
         )
 
         haut = QHBoxLayout()
@@ -64,9 +68,10 @@ class PageDemandes(QWidget):
         haut.addWidget(reglages_demandes)
 
         disposition = QVBoxLayout(self)
-        disposition.addWidget(etiquette("Demandes d'amis", "titre"))
+        disposition.setContentsMargins(0, 0, 0, 0)
+        disposition.setSpacing(12)
         disposition.addLayout(haut)
-        disposition.addWidget(etiquette(EXPLICATIONS, "description", retour_ligne=True))
+        disposition.addWidget(Bandeau("info", EXPLICATIONS))
         disposition.addWidget(self.vide)
         disposition.addWidget(self.table, 1)
         self._derniere: tuple = ()

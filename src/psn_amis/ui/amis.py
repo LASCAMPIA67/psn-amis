@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -40,7 +41,9 @@ from PySide6.QtWidgets import (
 
 from psn_amis.amis import EXPLICATIONS_CRITERES, Critere, Resultat, Selection, Verdict
 from psn_amis.gestion import Gestion, LigneAmi, Vue
+from psn_amis.ui import composants
 from psn_amis.ui.commun import date_courte, etiquette
+from psn_amis.ui.composants import Bandeau, EtatVide
 
 COLONNES = (
     "Pseudo",
@@ -250,6 +253,8 @@ class Apercu(QDialog):
         boutons = QDialogButtonBox()
         self.supprimer = QPushButton(f"Supprimer {n} ami{'s' if n > 1 else ''}")
         self.supprimer.setObjectName("danger")
+        self.supprimer.setProperty("icone", "poubelle")
+        composants.colorer_icone(self.supprimer, composants.palette_courante())
         self.supprimer.setEnabled(False)
         boutons.addButton(self.supprimer, QDialogButtonBox.ButtonRole.AcceptRole)
         fermer = boutons.addButton(
@@ -278,10 +283,11 @@ class PageAmis(QWidget):
 
         self.entete = etiquette("Connexion à Sony en attente…", retour_ligne=True)
         self.bandeaux = QVBoxLayout()
-        actualiser = QPushButton("Actualiser")
-        actualiser.setToolTip("Redemande la liste d'amis à Sony (F5)")
+        actualiser = composants.bouton(
+            "Actualiser", "actualiser", aide="Redemande la liste d'amis à Sony (F5)"
+        )
         actualiser.clicked.connect(self._actualiser)
-        self.pseudos = QPushButton("Récupérer les pseudos")
+        self.pseudos = composants.bouton("Récupérer les pseudos", "personne")
         self.pseudos.setToolTip(
             "Demande à Sony les pseudos inconnus (200 au plus, une requête chacun, "
             "environ 3 secondes par pseudo)."
@@ -316,32 +322,46 @@ class PageAmis(QWidget):
         self.modele.dataChanged.connect(self._compter_coches)
         self.modele.modelReset.connect(self._compter_coches)
 
-        tout = QPushButton("Tout cocher (affichés)")
-        tout.setToolTip("Coche tous les amis visibles avec la recherche et le filtre")
+        tout = composants.bouton(
+            "Tout cocher",
+            "succes",
+            "plat",
+            "Coche tous les amis visibles avec la recherche et le filtre",
+        )
         tout.clicked.connect(lambda: self._cocher_affiches(True))
-        rien = QPushButton("Tout décocher")
+        rien = composants.bouton("Tout décocher", "erreur", "plat")
         rien.clicked.connect(lambda: self.modele.cocher(set(self.modele.coches), False))
-        proteger = QPushButton("Protéger")
-        proteger.setToolTip("Protège les amis cochés contre toute suppression")
+        proteger = composants.bouton(
+            "Protéger",
+            "bouclier",
+            aide="Protège les amis cochés contre toute suppression",
+        )
         proteger.clicked.connect(self._proteger_coches)
-        deproteger = QPushButton("Retirer la protection")
+        deproteger = composants.bouton("Retirer la protection")
         deproteger.clicked.connect(self._deproteger_coches)
-        self.supprimer_coches = QPushButton("Supprimer les cochés…")
-        self.supprimer_coches.setObjectName("danger")
+        self.supprimer_coches = composants.bouton(
+            "Supprimer les cochés…",
+            "poubelle",
+            "danger",
+            "Aperçu puis confirmation : rien n'est supprimé sans votre accord",
+        )
         self.supprimer_coches.clicked.connect(self._supprimer_coches)
         self.coches = etiquette("0 coché", "discret")
 
         barre_haut = QHBoxLayout()
+        barre_haut.setSpacing(8)
         barre_haut.addWidget(self.recherche, 3)
         barre_haut.addWidget(self.filtre, 1)
         barre_haut.addWidget(actualiser)
         barre_haut.addWidget(self.pseudos)
         barre_coches = QHBoxLayout()
-        for bouton in (tout, rien, proteger, deproteger):
+        barre_coches.setSpacing(6)
+        for bouton in (tout, rien):
             barre_coches.addWidget(bouton)
         barre_coches.addWidget(self.coches)
         barre_coches.addStretch(1)
-        barre_coches.addWidget(self.supprimer_coches)
+        for bouton in (proteger, deproteger, self.supprimer_coches):
+            barre_coches.addWidget(bouton)
 
         # Sélection par nombre.
         self.nombre = QSpinBox()
@@ -356,8 +376,12 @@ class PageAmis(QWidget):
                 EXPLICATIONS_CRITERES[critere],
                 Qt.ItemDataRole.ToolTipRole,
             )
-        apercu = QPushButton("Prévisualiser les suppressions…")
-        apercu.setObjectName("principal")
+        apercu = composants.bouton(
+            "Prévisualiser…",
+            "liste",
+            "principal",
+            "Montre exactement qui serait supprimé ; rien n'est supprimé à cette étape",
+        )
         apercu.clicked.connect(self._apercu_par_nombre)
         groupe_nombre = QGroupBox("Supprimer un nombre d'amis non protégés")
         ligne_nombre = QHBoxLayout(groupe_nombre)
@@ -392,14 +416,15 @@ class PageAmis(QWidget):
         self.nouveau_protege = QLineEdit()
         self.nouveau_protege.setPlaceholderText("Pseudo à protéger")
         self.nouveau_protege.returnPressed.connect(self._ajouter_protege)
-        ajouter = QPushButton("Protéger")
+        ajouter = composants.bouton("Protéger", "bouclier", "principal")
         ajouter.clicked.connect(self._ajouter_protege)
-        retirer = QPushButton("Retirer")
+        retirer = composants.bouton("Retirer", "erreur", "plat")
         retirer.clicked.connect(self._retirer_protege)
-        importer = QPushButton("Importer…")
-        importer.setToolTip("Fichier exporté, ou un pseudo par ligne")
+        importer = composants.bouton(
+            "Importer…", "importer", "plat", "Fichier exporté, ou un pseudo par ligne"
+        )
         importer.clicked.connect(self._importer)
-        exporter = QPushButton("Exporter…")
+        exporter = composants.bouton("Exporter…", "exporter", "plat")
         exporter.clicked.connect(self._exporter)
         groupe_proteges = QGroupBox("Amis protégés (jamais supprimés)")
         disposition_proteges = QVBoxLayout(groupe_proteges)
@@ -424,13 +449,26 @@ class PageAmis(QWidget):
         gauche = QWidget()
         disposition_gauche = QVBoxLayout(gauche)
         disposition_gauche.setContentsMargins(0, 0, 0, 0)
+        disposition_gauche.setSpacing(10)
+        self.vide = EtatVide(
+            "amis",
+            "Votre liste d'amis apparaîtra ici",
+            "Dès que PSN Amis est connecté à votre compte et que Sony a renvoyé la "
+            "liste complète, vous pourrez la consulter, protéger des amis et faire de "
+            "la place.",
+        )
+        self.pile_table = QStackedWidget()
+        self.pile_table.addWidget(self.vide)
+        self.pile_table.addWidget(self.table)
         disposition_gauche.addLayout(barre_haut)
-        disposition_gauche.addWidget(self.table, 1)
+        disposition_gauche.addWidget(self.pile_table, 1)
         disposition_gauche.addLayout(barre_coches)
         disposition_gauche.addWidget(groupe_nombre)
         droite = QWidget()
         disposition_droite = QVBoxLayout(droite)
         disposition_droite.setContentsMargins(0, 0, 0, 0)
+        disposition_droite.setSpacing(10)
+        droite.setMinimumWidth(320)
         disposition_droite.addWidget(groupe_proteges, 1)
         disposition_droite.addWidget(groupe_operation, 1)
         separateur = QSplitter()
@@ -439,8 +477,10 @@ class PageAmis(QWidget):
         separateur.setStretchFactor(0, 3)
         separateur.setStretchFactor(1, 2)
 
+        separateur.setChildrenCollapsible(False)
         disposition = QVBoxLayout(self)
-        disposition.addWidget(etiquette("Amis", "titre"))
+        disposition.setContentsMargins(0, 0, 0, 0)
+        disposition.setSpacing(10)
         disposition.addWidget(self.entete)
         disposition.addLayout(self.bandeaux)
         disposition.addWidget(separateur, 1)
@@ -477,6 +517,7 @@ class PageAmis(QWidget):
                 self.table.resizeColumnsToContents()
                 self.table.setColumnWidth(0, max(self.table.columnWidth(0), 220))
         self.pseudos.setEnabled(vue.pseudos_manquants > 0)
+        self.pile_table.setCurrentIndex(1 if vue.amis else 0)
         self._afficher_proteges(vue)
         self._afficher_operation(vue)
         self._afficher_bandeaux(vue)
@@ -566,16 +607,19 @@ class PageAmis(QWidget):
             elif element.widget():
                 element.widget().deleteLater()
         for niveau, texte, action in bandeaux:
-            ligne = QHBoxLayout()
-            ligne.addWidget(etiquette(texte, f"bandeau_{niveau}", True), 1)
+            bandeau = Bandeau(niveau, texte)
             if action is not None:
-                bouton = QPushButton("Voir et confirmer…")
-                bouton.clicked.connect(action)
-                ligne.addWidget(bouton)
-                ecarter = QPushButton("Ignorer")
-                ecarter.clicked.connect(self.gestion.ecarter_proposition)
-                ligne.addWidget(ecarter)
-            self.bandeaux.addLayout(ligne)
+                bandeau.ajouter_action(
+                    composants.bouton(
+                        "Voir et confirmer…", "liste", "principal", action=action
+                    )
+                )
+                bandeau.ajouter_action(
+                    composants.bouton(
+                        "Ignorer", genre="plat", action=self.gestion.ecarter_proposition
+                    )
+                )
+            self.bandeaux.addWidget(bandeau)
 
     def _compter_coches(self, *_: object) -> None:
         n = len(self.modele.coches)

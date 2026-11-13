@@ -15,17 +15,16 @@ from pathlib import Path
 
 from PySide6.QtGui import QKeySequence, QShortcut, QTextCursor
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLineEdit,
     QPlainTextEdit,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
+from psn_amis.ui import composants
 from psn_amis.ui.commun import Message, apparence
 from psn_amis.ui.theme import Palette
 
@@ -59,19 +58,19 @@ class Console(QWidget):
         self.filtre.addItems(list(FILTRES))
         self.filtre.setToolTip("N'afficher qu'une partie des événements")
         self.filtre.currentIndexChanged.connect(self.reafficher)
-        self.details = QCheckBox("Détails des erreurs")
+        self.details = composants.Interrupteur("Détails")
         self.details.setToolTip(
             "Affiche les détails techniques des erreurs (le code npsso reste masqué)."
         )
         self.details.toggled.connect(self.reafficher)
 
-        copier = QPushButton("Copier")
+        copier = composants.bouton("Copier", "copier", "plat")
         copier.setToolTip("Copie la sélection, ou tout ce qui est affiché")
         copier.clicked.connect(self.copier)
-        effacer = QPushButton("Effacer l'affichage")
+        effacer = composants.bouton("Effacer l'affichage", "effacer", "plat")
         effacer.setToolTip("Vide cet écran ; le journal enregistré n'est pas touché")
         effacer.clicked.connect(self.effacer_affichage)
-        exporter = QPushButton("Exporter…")
+        exporter = composants.bouton("Exporter…", "exporter", "plat")
         exporter.setToolTip("Enregistre les événements affichés dans un fichier texte")
         exporter.clicked.connect(self.exporter)
 

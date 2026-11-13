@@ -102,3 +102,21 @@ def creer_mutex(nom: str = MUTEX) -> None:
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     kernel32.CreateMutexW.argtypes = (ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p)
     _mutex = kernel32.CreateMutexW(None, 0, nom)
+
+
+def animations_windows() -> bool:
+    """Le réglage Windows « Effets d'animation » (Accessibilité › Effets visuels).
+
+    True s'il est activé, ou si on ne peut pas le savoir (autre système).
+    """
+    if os.name != "nt":
+        return True
+    spi_getclientareaanimation = 0x1042
+    actif = ctypes.c_int(1)
+    try:
+        ok = ctypes.windll.user32.SystemParametersInfoW(
+            spi_getclientareaanimation, 0, ctypes.byref(actif), 0
+        )
+    except AttributeError, OSError:
+        return True
+    return bool(actif.value) if ok else True

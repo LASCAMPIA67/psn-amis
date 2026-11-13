@@ -23,10 +23,21 @@ from pathlib import Path
 from typing import Any
 
 # Version du format de reglages.toml. 1 : versions 2.x (sans ce numéro).
-VERSION_FORMAT = 2
+VERSION_FORMAT = 3
 CLE_VERSION = "version_reglages"
 
-THEMES = ("sombre", "doux", "daltonien", "clair")
+THEMES = (
+    "graphite",
+    "minuit",
+    "emeraude",
+    "amethyste",
+    "clair",
+    "daltonien",
+    "systeme",
+)
+# Anciens noms de thèmes (versions 2.x et format 2) : repris automatiquement.
+ANCIENS_THEMES = {"sombre": "graphite", "doux": "minuit"}
+ANIMATIONS = ("systeme", "activees", "coupees")
 
 
 class Effet(StrEnum):
@@ -255,11 +266,23 @@ class Reglages:
     )
     # ─── Application ───
     theme: str = _reglage(
-        "sombre",
+        "graphite",
         APPLICATION,
         "Thème",
-        "sombre, doux (couleurs plus calmes), daltonien (bleu, jaune, orange) ou clair.",
+        "graphite (Graphite Premium), minuit (Bleu Minuit), emeraude (Émeraude), "
+        "amethyste (Améthyste), clair (Clair Élégant), daltonien (contraste pour "
+        "daltoniens) ou systeme (suit le mode clair ou sombre de Windows). "
+        "S'applique tout de suite.",
         choix=THEMES,
+    )
+    animations: str = _reglage(
+        "systeme",
+        APPLICATION,
+        "Animations",
+        "systeme : suit le réglage « Effets d'animation » de Windows. activees : "
+        "transitions et effets discrets. coupees : aucune animation (affichage "
+        "instantané).",
+        choix=ANIMATIONS,
     )
     verifier_mises_a_jour: bool = _reglage(
         False,
@@ -480,11 +503,15 @@ def migrer(donnees: dict[str, Any]) -> dict[str, Any]:
     """Met des réglages d'un ancien format au format actuel (VERSION_FORMAT).
 
     Format 1 (versions 2.x) : mêmes noms, mêmes valeurs ; seul le numéro de format
-    manque. Les futurs changements de nom se feront ici.
+    manque. Format 3 : les thèmes « sombre » et « doux » deviennent « graphite » et
+    « minuit » (repris même dans un fichier modifié à la main).
     """
     version = donnees.get(CLE_VERSION, 1)
     if not isinstance(version, int) or version < 1:
         version = 1
+    theme = donnees.get("theme")
+    if isinstance(theme, str) and theme.strip().lower() in ANCIENS_THEMES:
+        donnees["theme"] = ANCIENS_THEMES[theme.strip().lower()]
     donnees[CLE_VERSION] = VERSION_FORMAT
     return donnees
 
