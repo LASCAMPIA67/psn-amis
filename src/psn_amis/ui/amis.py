@@ -475,6 +475,7 @@ class PageAmis(QWidget):
             self.modele.remplacer(vue.amis)
             if premiere_fois:
                 self.table.resizeColumnsToContents()
+                self.table.setColumnWidth(0, max(self.table.columnWidth(0), 220))
         self.pseudos.setEnabled(vue.pseudos_manquants > 0)
         self._afficher_proteges(vue)
         self._afficher_operation(vue)

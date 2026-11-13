@@ -62,7 +62,7 @@ def version() -> str:
 
 def ecrire_version_windows(numero: str) -> None:
     """Métadonnées de l'exécutable (Propriétés → Détails dans l'Explorateur)."""
-    morceaux = tuple(int(n) for n in numero.split(".")) + (0,)
+    morceaux = (*(int(n) for n in numero.split(".")), 0)
     texte = f"""VSVersionInfo(
   ffi=FixedFileInfo(filevers={morceaux}, prodvers={morceaux}, mask=0x3f, flags=0x0,
     OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),

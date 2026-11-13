@@ -1,4 +1,7 @@
-# Publie une version quand une étiquette vX.Y.Z est envoyée : vérifie, teste, publie.
+# Publie une version quand une étiquette vX.Y.Z est envoyée : vérifie, teste, compile,
+# teste l'installateur, puis publie la version avec l'installateur et ses empreintes.
+#
+# Rien n'est publié sans une étiquette poussée volontairement par le mainteneur.
 name: Publication
 
 on:
@@ -12,13 +15,14 @@ concurrency:
   group: publication
   cancel-in-progress: false
 
+env:
+  QT_QPA_PLATFORM: offscreen
+
 jobs:
-  publier:
-    name: Publier la version
+  construire:
+    name: Vérifier et construire
     runs-on: windows-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write # créer la publication
+    timeout-minutes: 45
     steps:
       - name: Récupérer le code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,10 +32,11 @@ jobs:
       - name: Installer uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          enable-cache: true
+          # Pas de cache pour une publication : tout vient des sources figées.
+          enable-cache: false
 
-      - name: Installer Python et les bibliothèques (versions figées)
-        run: uv sync --locked
+      - name: Installer Python, les bibliothèques et les outils (versions figées)
+        run: uv sync --locked --group construction
 
       - name: Vérifier que la version du code est celle de l'étiquette
         run: uv run outils/verifier_version.py --etiquette "$env:GITHUB_REF_NAME"
@@ -42,13 +47,60 @@ jobs:
       - name: Lancer les tests
         run: uv run pytest
 
+      - name: Installer Inno Setup 6.7.3 (installateur officiel, empreinte vérifiée)
+        run: |
+          $fichier = "$env:RUNNER_TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe" -OutFile $fichier
+          $empreinte = (Get-FileHash $fichier -Algorithm SHA256).Hash
+          if ($empreinte -ne "9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732") {
+            throw "Empreinte d'Inno Setup inattendue : $empreinte"
+          }
+          Start-Process $fichier -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER" -Wait
+
+      - name: Compiler, lancer les exécutables, construire l'installateur
+        run: uv run outils/construire.py
+
+      - name: Tester l'installation, la mise à niveau et les désinstallations
+        run: uv run outils/tester_installation.py
+
       - name: Préparer les notes de version (depuis CHANGELOG.md)
-        run: uv run outils/notes_version.py "$env:GITHUB_REF_NAME" --sortie notes.md
+        run: uv run outils/notes_version.py "$env:GITHUB_REF_NAME" --sortie dist/notes.md
+
+      - name: Garder les fichiers à publier
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: publication
+          path: |
+            dist/PSN-Amis-Setup-*.exe
+            dist/SHA256SUMS.txt
+            dist/notes.md
+          retention-days: 7
+          if-no-files-found: error
+
+  publier:
+    name: Publier la version
+    needs: construire
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # créer la publication
+    steps:
+      - name: Récupérer les fichiers construits
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: publication
+          path: dist
+
+      - name: Vérifier les empreintes avant publication
+        working-directory: dist
+        run: sha256sum --check SHA256SUMS.txt
 
       - name: Publier sur GitHub
         env:
           GH_TOKEN: ${{ github.token }}
+          ETIQUETTE: ${{ github.ref_name }}
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY `
-            --title "PSN Amis $version" --notes-file notes.md --verify-tag
+          version="${ETIQUETTE#v}"
+          gh release create "$ETIQUETTE" --repo "$GITHUB_REPOSITORY" \
+            --title "PSN Amis $version" --notes-file dist/notes.md --verify-tag \
+            "dist/PSN-Amis-Setup-$version.exe" dist/SHA256SUMS.txt

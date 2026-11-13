@@ -6,6 +6,48 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le p
 
 ## [Non publié]
 
+## [3.0.0] - 2026-11-13
+
+PSN Amis devient une application Windows : un installateur, une fenêtre, et la gestion de la liste d'amis. Version majeure, car l'emplacement des données, le lancement et l'organisation du code changent (voir « Incompatibilités »).
+
+### Ajouté
+
+- **Installateur Windows** `PSN-Amis-Setup-3.0.0.exe` : installation sans droits administrateur, dossier au choix, raccourci Bureau facultatif, présence dans les applications installées, mise à niveau sur place. Python et uv ne sont plus nécessaires.
+- **Désinstallation à trois niveaux** : le programme seulement (données gardées), le programme et les données, ou tout, y compris le code npsso du Gestionnaire d'identification. Seuls les fichiers de PSN Amis sont supprimés, dans un dossier reconnu par son fichier témoin.
+- **Fenêtre de l'application** : tableau de bord (statut, compte, capacité de la liste, demandes, acceptations, suppressions, synchronisation, avertissements), console d'activité intégrée (couleurs, symboles, recherche, filtres, copie, export, effacement de l'affichage sans toucher au journal), demandes en attente, paramètres, à propos.
+- **Commandes** : démarrer, arrêter, pause, vérifier maintenant, reconnecter, redémarrer le moteur, redémarrer l'application, quitter, avec raccourcis clavier (<kbd>F5</kbd>, <kbd>Ctrl</kbd>+<kbd>P</kbd>, <kbd>Ctrl</kbd>+<kbd>1</kbd> à <kbd>6</kbd>…).
+- **Gestion des amis** : liste consultable, triable, filtrable et recherchable ; suppression individuelle ou multiple, sélection par nombre selon un critère explicite (les plus anciennement acceptés, les premiers vus, ordre alphabétique) ; aperçu avant suppression et confirmation explicite ; file d'attente avec pause entre deux suppressions, progression, arrêt, bilan et historique. Une suppression à la réponse ambiguë est marquée « à vérifier », jamais refaite à l'aveugle, puis confirmée d'après la liste renvoyée par Sony.
+- **Amis protégés** (différents de la liste blanche des demandes) : jamais supprimés, vérifiés à la sélection, dans l'aperçu et juste avant chaque suppression ; suivis par identifiant de compte même si le joueur change de pseudo ; import et export.
+- **Nettoyage de la liste** : manuel par défaut, assisté (proposition à confirmer) ou automatique, avec seuil, capacité cible, limites par nettoyage et par jour, délai entre deux nettoyages, plage horaire, arrêt d'urgence, et arrêt automatique si suppressions et acceptations tournent en boucle.
+- **Demandes** : acceptation automatique désactivable ; refus des demandes de la liste noire (facultatif, après vérification que le joueur n'est pas déjà ami) ; traitement des demandes d'un type non reconnu (laissées en attente par défaut).
+- **Paramètres modifiables dans l'application**, avec description, bornes, validation et indication de l'effet (immédiat, redémarrage du moteur ou de l'application) ; import, export, valeurs par défaut ; reprise des données d'une ancienne version.
+- **Assistant de première utilisation** : présentation, avertissement sur l'API non officielle, connexion du compte avec vérification auprès de Sony, premiers réglages.
+- **Mises à jour** : vérification au lancement (si autorisée) ou à la demande, fenêtre « Mise à jour disponible » avec les nouveautés, téléchargement de l'installateur officiel vérifié (HTTPS, adresses GitHub du projet, taille, empreinte SHA-256), signature Authenticode contrôlée, puis installation et relance automatiques.
+- **Thème clair**, en plus des thèmes sombre, doux et daltonien.
+- **Lancement avec Windows**, démarrage réduit, icône dans la zone de notification et choix du comportement de la croix (application installée).
+- **Mode démonstration** `--demo` : faux compte, aucune connexion à Sony.
+- Intégration continue : compilation de l'application, démarrage réel des exécutables, construction et test de l'installateur ; publication automatique de l'installateur et de `SHA256SUMS.txt` sur une étiquette `vX.Y.Z`.
+
+### Modifié
+
+- **Données de l'utilisateur dans `%LOCALAPPDATA%\PSN Amis`**, séparées du programme ; données de chaque compte PSN rangées à part.
+- `reglages.toml` est désormais écrit par l'application (écriture atomique, ancienne version gardée dans `reglages.toml.bak`) et porte un numéro de format ; `reglages.exemple.toml` disparaît : le fichier créé explique lui-même chaque réglage.
+- Le code est rangé dans le paquet `src/psn_amis/` ; la version est définie dans `src/psn_amis/__init__.py`.
+- Le journal garde un nombre d'archives réglable (`journaux_archives`).
+- Les demandes d'ami proche venues d'un ami existant sont signalées avec un message plus clair.
+
+### Sécurité
+
+- Les demandes d'ami proche (partage du vrai nom) ne sont **jamais** acceptées automatiquement, ni refusées : la seule opération de refus de PSNAWP supprimerait l'ami lui-même. Le refus automatique est indisponible et affiché comme tel.
+- Le compte connecté n'est jamais une cible de suppression, et une suppression préparée pour un compte n'est jamais exécutée sur un autre.
+- La saisie du code npsso est masquée, effacée du champ aussitôt, et le code n'apparaît jamais dans la console ni dans les exports.
+
+### Incompatibilités et migration
+
+- Lancement : la fenêtre s'ouvre par défaut. Le tableau de bord en couleur reste disponible avec `--console` (ou « PSN Amis console.exe »). Les options `--test`, `--simple`, `--configurer` et `--diagnostic` sont conservées.
+- Depuis le code source, on lance `python -m psn_amis` (le lanceur `Lancer PSN Amis.cmd` le fait) ; `accepter_amis.py` n'existe plus.
+- Au premier lancement depuis le code source, `reglages.toml`, `amis.json` et le journal de la version 2.x sont **copiés** dans `%LOCALAPPDATA%\PSN Amis` ; les anciens fichiers ne sont pas modifiés. Depuis l'application installée : Paramètres → « Reprendre les données d'une ancienne version ». Le code npsso déjà rangé dans le coffre de Windows est réutilisé tel quel.
+
 ## [2.5.0] - 2026-11-13
 
 ### Ajouté
@@ -129,7 +171,8 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
 - Une seule instance à la fois, grâce à un fichier verrou.
 
-[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.5.0...HEAD
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.5.0...v3.0.0
 [2.5.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.1...v2.4.0

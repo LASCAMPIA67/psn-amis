@@ -1,4 +1,5 @@
-# Vérifie chaque envoi et chaque demande de fusion : style, version, tests, documents, workflows.
+# Vérifie chaque envoi et chaque demande de fusion : style, version, tests, application
+# Windows compilée et installateur, documents, workflows.
 name: Vérification
 
 on:
@@ -14,11 +15,15 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Pas d'écran sur les machines de GitHub : fenêtres Qt dessinées hors écran.
+  QT_QPA_PLATFORM: offscreen
+
 jobs:
   python:
     name: Style, version et tests
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Récupérer le code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,14 +44,59 @@ jobs:
       - name: Vérifier la mise en forme (Ruff)
         run: uv run ruff format --check .
 
-      - name: Vérifier la version (moteur.py, pyproject.toml, CHANGELOG.md)
+      - name: Vérifier la version (__init__.py, pyproject.toml, CHANGELOG.md)
         run: uv run outils/verifier_version.py
 
-      - name: Lancer les tests
+      - name: Lancer les tests (aucun compte PSN, aucune requête réelle)
         run: uv run pytest
 
-      - name: Dessiner les captures d'écran (données de démonstration)
+      - name: Dessiner les captures d'écran de la console (démonstration)
         run: uv run outils/captures.py --sortie "$env:RUNNER_TEMP/captures"
+
+  construction:
+    name: Application Windows et installateur
+    runs-on: windows-latest
+    timeout-minutes: 40
+    needs: python
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+
+      - name: Installer les outils de compilation (versions figées)
+        run: uv sync --locked --group construction
+
+      - name: Installer Inno Setup 6.7.3 (installateur officiel, empreinte vérifiée)
+        run: |
+          $fichier = "$env:RUNNER_TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe" -OutFile $fichier
+          $empreinte = (Get-FileHash $fichier -Algorithm SHA256).Hash
+          if ($empreinte -ne "9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732") {
+            throw "Empreinte d'Inno Setup inattendue : $empreinte"
+          }
+          Start-Process $fichier -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER" -Wait
+
+      - name: Compiler, lancer les exécutables, construire l'installateur
+        run: uv run outils/construire.py
+
+      - name: Tester l'installation, la mise à niveau et les désinstallations
+        run: uv run outils/tester_installation.py
+
+      - name: Garder l'installateur (artefact de la vérification)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installateur-windows
+          path: |
+            dist/PSN-Amis-Setup-*.exe
+            dist/SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
 
   dependances:
     name: Relecture des dépendances

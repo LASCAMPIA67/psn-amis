@@ -151,8 +151,8 @@ def main() -> int:
 
         print("2. Démarrage sans Python ni uv (environnement minimal)")
         minimal = {
-            "SystemRoot": os.environ["SystemRoot"],
-            "PATH": os.path.join(os.environ["SystemRoot"], "System32"),
+            "SystemRoot": os.environ["SYSTEMROOT"],
+            "PATH": str(Path(os.environ["SYSTEMROOT"]) / "System32"),
             "TEMP": str(travail),
             "TMP": str(travail),
             "LOCALAPPDATA": str(travail / "localappdata"),
@@ -209,7 +209,11 @@ def main() -> int:
         print("5. Réinstallation, puis niveau 2 (programme et données)")
         verifier(installer(dossier, journaux / "reinstallation.log") == 0, "réinstallé")
         verifier((donnees / "reglages.toml").is_file(), "anciennes données retrouvées")
-        coffre.ecrire("code-de-test-sans-valeur", CIBLE_TEST)
+        # Sur certaines machines (intégration continue), le coffre est indisponible :
+        # les vérifications du code sont alors sautées, et dites telles quelles.
+        coffre_ok = coffre.ecrire("code-de-test-sans-valeur", CIBLE_TEST)
+        if not coffre_ok:
+            print("  (coffre de Windows indisponible : vérifications du code sautées)")
         desinstaller(
             dossier,
             journaux / "niveau2.log",
@@ -224,10 +228,11 @@ def main() -> int:
             (donnees / "note-personnelle.txt").is_file(),
             "fichier étranger à PSN Amis conservé",
         )
-        verifier(
-            coffre.lire(CIBLE_TEST) is not None,
-            "code enregistré conservé (niveau 2 sans case cochée)",
-        )
+        if coffre_ok:
+            verifier(
+                coffre.lire(CIBLE_TEST) is not None,
+                "code enregistré conservé (niveau 2 sans case cochée)",
+            )
 
         print("6. Réinstallation, puis niveau 3 (tout)")
         donnees_de_test(donnees)
@@ -241,7 +246,8 @@ def main() -> int:
             f"/DONNEES={donnees}",
             f"/CIBLE={CIBLE_TEST}",
         )
-        verifier(coffre.lire(CIBLE_TEST) is None, "code de test retiré du coffre")
+        if coffre_ok:
+            verifier(coffre.lire(CIBLE_TEST) is None, "code de test retiré du coffre")
         verifier(not (donnees / "psn-amis.donnees").exists(), "fichier témoin retiré")
         verifier((donnees / "note-personnelle.txt").is_file(), "fichier étranger gardé")
 

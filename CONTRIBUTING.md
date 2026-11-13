@@ -25,18 +25,20 @@ uv sync          # crée .venv avec Python 3.15, les bibliothèques et les outil
 uv run pytest    # lance les tests
 ```
 
-Pour tester en vrai, il te faut ton propre code npsso : lance `Lancer PSN Amis.cmd`, l'assistant te le demande et le range dans le Gestionnaire d'identification de Windows. Il n'y a aucun code dans le dépôt, et `npsso.txt` est ignoré par Git.
+Pour découvrir l'application sans compte : `uv run python -m psn_amis --demo` (faux compte, aucune requête). Pour tester en vrai, il te faut ton propre code npsso : lance `Lancer PSN Amis.cmd`, l'assistant te le demande et le range dans le Gestionnaire d'identification de Windows. Il n'y a aucun code dans le dépôt, et `npsso.txt` est ignoré par Git. **Ne lance jamais de suppression d'amis sur un vrai compte pour tester** : utilise le mode démonstration.
 
 ## Règles du code
 
-- Python 3.15. Trois fichiers principaux : `moteur.py` (Sony, acceptations, état partagé), `tableau_de_bord.py` (affichage Rich, thèmes et clavier), `accepter_amis.py` (démarrage). Quatre petits modules autour : `reglages.py` (`reglages.toml`), `coffre.py` (Gestionnaire d'identification de Windows), `notifications.py` (bulles et bip), `mises_a_jour.py` (dernière version sur GitHub). Le moteur ne dépend pas de Rich.
+- Python 3.15, paquet `src/psn_amis/`. Le moteur (`moteur.py`) et la gestion des amis (`amis.py`, `gestion.py`, `nettoyage.py`, `demandes.py`, `psn.py`) ne dépendent ni de Qt ni de Rich ; `controleur.py` pilote le moteur sans Qt ; l'interface est dans `app.py` et `ui/`, le mode console dans `console.py` et `tableau_de_bord.py`.
+- **Un seul fil parle à Sony** : le moteur. L'interface ne fait jamais de requête elle-même ; elle demande des opérations à `Gestion`, que le moteur exécute entre deux vérifications. Elle ne touche jamais aux widgets depuis un autre fil (signaux Qt, voir `ui/commun.py`).
 - Noms, textes et commentaires **en français**, avec des phrases simples. L'application vouvoie ; la documentation du dépôt tutoie.
-- Les réglages modifiables par l'utilisateur sont dans `reglages.py` (valeurs par défaut et bornes) et documentés dans `reglages.exemple.toml`, avec la même valeur par défaut : un test le vérifie. Les réglages techniques restent en haut de `moteur.py`.
-- Ne jamais casser la sécurité : le code npsso n'est jamais affiché ni journalisé (tout message passe par `FormatMasque`), seuls les serveurs de Sony peuvent être contactés pour le compte (`AdaptateurSony`), la seule autre requête (version sur GitHub) reste coupée par défaut, le script ne retire jamais d'amis et n'accepte jamais une demande de partage du vrai nom.
+- Les réglages modifiables par l'utilisateur sont déclarés **une seule fois**, dans `reglages.py` : valeur par défaut, bornes ou choix, libellé, description et effet d'un changement. La page Paramètres et `reglages.toml` en sont tirés. Les réglages techniques restent en haut de `moteur.py`.
+- La version est écrite à un seul endroit : `src/psn_amis/__init__.py` (`outils/verifier_version.py` contrôle `pyproject.toml` et `CHANGELOG.md`).
+- Ne jamais casser la sécurité : le code npsso n'est jamais affiché ni journalisé (tout message passe par `FormatMasque`), seuls les serveurs de Sony peuvent être contactés pour le compte (`AdaptateurSony`), la seule autre requête (version sur GitHub) reste coupée par défaut, aucune suppression d'ami sans confirmation (ou nettoyage activé), jamais un ami protégé ni le compte connecté, jamais une demande d'ami proche acceptée ou refusée (le refus de PSNAWP supprimerait l'ami).
 - Les tests ne touchent jamais au vrai coffre de Windows ni aux vraies notifications : `tests/conftest.py` les remplace pour tous les tests, et les tests qui lancent le vrai programme écrivent un `reglages.toml` avec `coffre_windows = false`.
 - Le code est mis en forme et vérifié par [Ruff](https://docs.astral.sh/ruff/) (règles dans `pyproject.toml`, 88 colonnes). Les données venant de Sony (pseudos…) sont affichées avec `Text(...)`, jamais interprétées comme du balisage Rich.
-- Tout ce qui parle à Sony s'écrit dans `moteur.py` et se teste avec le faux Sony de `tests/conftest.py` : aucun test ne doit avoir besoin d'Internet ni d'un vrai compte.
-- Les captures d'écran de `docs/images/` sont dessinées par `outils/captures.py` avec des données inventées : pour les refaire après un changement d'affichage, relance ce script.
+- Tout ce qui parle à Sony passe par `moteur.py` ou `psn.py` et se teste avec le faux Sony (`tests/conftest.py`, `src/psn_amis/simulation.py`) : aucun test ne doit avoir besoin d'Internet ni d'un vrai compte. Les tests de la fenêtre tournent hors écran (`QT_QPA_PLATFORM=offscreen`).
+- Les captures d'écran de `docs/images/` sont faites avec des données inventées : `outils/captures_fenetre.py` pour la fenêtre (PNG), `outils/captures.py` pour la console (SVG).
 
 ## Vérifier avant d'envoyer
 
@@ -45,13 +47,15 @@ Depuis le dossier du projet :
 ```shell
 uv run ruff check .                   # qualité du code
 uv run ruff format .                  # mise en forme
-uv run pytest                         # tests (environ 30 secondes)
-uv run outils/verifier_version.py     # version identique dans moteur.py, pyproject.toml et CHANGELOG.md
+uv run pytest                         # tests (environ 2 minutes)
+uv run outils/verifier_version.py     # version identique dans __init__.py, pyproject.toml et CHANGELOG.md
+uv run outils/construire.py           # Windows : exécutables, démarrage réel, installateur
+uv run outils/tester_installation.py  # Windows : installe, met à niveau, désinstalle pour de vrai
 uv run outils/captures.py             # redessine les captures d'écran, si l'affichage a changé
 uv run outils/icone.py                # redessine l'icône, si outils/icone.py a changé
 ```
 
-Teste ensuite en vrai, avec ton compte : `Lancer PSN Amis.cmd`.
+Essaie ensuite la fenêtre en démonstration (`uv run python -m psn_amis --demo`), puis en vrai avec ton compte : `Lancer PSN Amis.cmd`.
 
 Les mêmes vérifications tournent sur GitHub à chaque envoi, avec en plus [markdownlint](https://github.com/DavidAnson/markdownlint-cli2) (documents) et [actionlint](https://github.com/rhysd/actionlint) (workflows).
 
