@@ -25,14 +25,15 @@ uv sync          # crée .venv avec Python 3.15, les bibliothèques et les outil
 uv run pytest    # lance les tests
 ```
 
-Pour tester en vrai, il te faut ton propre code npsso : lance `Lancer PSN Amis.cmd`, l'assistant te le demande. Il n'y a aucun code dans le dépôt, et `npsso.txt` est ignoré par Git.
+Pour tester en vrai, il te faut ton propre code npsso : lance `Lancer PSN Amis.cmd`, l'assistant te le demande et le range dans le Gestionnaire d'identification de Windows. Il n'y a aucun code dans le dépôt, et `npsso.txt` est ignoré par Git.
 
 ## Règles du code
 
-- Python 3.15, trois fichiers : `moteur.py` (Sony, acceptations, état partagé), `tableau_de_bord.py` (affichage Rich et clavier), `accepter_amis.py` (démarrage). Le moteur ne dépend pas de Rich.
+- Python 3.15. Trois fichiers principaux : `moteur.py` (Sony, acceptations, état partagé), `tableau_de_bord.py` (affichage Rich, thèmes et clavier), `accepter_amis.py` (démarrage). Quatre petits modules autour : `reglages.py` (`reglages.toml`), `coffre.py` (Gestionnaire d'identification de Windows), `notifications.py` (bulles et bip), `mises_a_jour.py` (dernière version sur GitHub). Le moteur ne dépend pas de Rich.
 - Noms, textes et commentaires **en français**, avec des phrases simples. L'application vouvoie ; la documentation du dépôt tutoie.
-- Les **réglages restent en haut** de `moteur.py`.
-- Ne jamais casser la sécurité : le code npsso n'est jamais affiché ni journalisé (tout message passe par `FormatMasque`), seuls les serveurs de Sony peuvent être contactés (`AdaptateurSony`), le script ne retire jamais d'amis et n'accepte jamais une demande de partage du vrai nom.
+- Les réglages modifiables par l'utilisateur sont dans `reglages.py` (valeurs par défaut et bornes) et documentés dans `reglages.exemple.toml`, avec la même valeur par défaut : un test le vérifie. Les réglages techniques restent en haut de `moteur.py`.
+- Ne jamais casser la sécurité : le code npsso n'est jamais affiché ni journalisé (tout message passe par `FormatMasque`), seuls les serveurs de Sony peuvent être contactés pour le compte (`AdaptateurSony`), la seule autre requête (version sur GitHub) reste coupée par défaut, le script ne retire jamais d'amis et n'accepte jamais une demande de partage du vrai nom.
+- Les tests ne touchent jamais au vrai coffre de Windows ni aux vraies notifications : `tests/conftest.py` les remplace pour tous les tests, et les tests qui lancent le vrai programme écrivent un `reglages.toml` avec `coffre_windows = false`.
 - Le code est mis en forme et vérifié par [Ruff](https://docs.astral.sh/ruff/) (règles dans `pyproject.toml`, 88 colonnes). Les données venant de Sony (pseudos…) sont affichées avec `Text(...)`, jamais interprétées comme du balisage Rich.
 - Tout ce qui parle à Sony s'écrit dans `moteur.py` et se teste avec le faux Sony de `tests/conftest.py` : aucun test ne doit avoir besoin d'Internet ni d'un vrai compte.
 - Les captures d'écran de `docs/images/` sont dessinées par `outils/captures.py` avec des données inventées : pour les refaire après un changement d'affichage, relance ce script.
@@ -47,6 +48,7 @@ uv run ruff format .                  # mise en forme
 uv run pytest                         # tests (environ 30 secondes)
 uv run outils/verifier_version.py     # version identique dans moteur.py, pyproject.toml et CHANGELOG.md
 uv run outils/captures.py             # redessine les captures d'écran, si l'affichage a changé
+uv run outils/icone.py                # redessine l'icône, si outils/icone.py a changé
 ```
 
 Teste ensuite en vrai, avec ton compte : `Lancer PSN Amis.cmd`.

@@ -15,6 +15,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -42,6 +43,11 @@ PSEUDOS = [
     "Kevin_du_67",
     "Noa-Hijacked",
 ]
+
+
+# Il y a combien d'heures ont eu lieu les ajouts du jour d'avant le lancement.
+HEURES_DES_ANCIENS_AJOUTS = (2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 6, 6, 7, 9, 10, 10, 11, 12)
+HEURES_DES_ANCIENS_AJOUTS += (12, 13, 13, 14, 16, 17, 18)
 
 
 class HorlogeFigee(datetime):
@@ -84,9 +90,14 @@ def suivi_demo() -> moteur.Suivi:
     # Les ajouts du jour « avant le lancement » : relus dans journal.txt au démarrage.
     anciens += [
         moteur.Ajout(
-            MAINTENANT - timedelta(hours=3, minutes=5 * rang), f"Joueur-{rang:02d}"
+            MAINTENANT - timedelta(hours=heures, minutes=7), f"Joueur-{rang:02d}"
         )
-        for rang in range(37 - len(PSEUDOS))
+        for rang, heures in enumerate(HEURES_DES_ANCIENS_AJOUTS)
+    ]
+    # La veille au soir : visibles dans l'histogramme des 24 heures seulement.
+    anciens += [
+        moteur.Ajout(MAINTENANT - timedelta(hours=heures, minutes=30), f"Veille-{rang}")
+        for rang, heures in enumerate((22, 22, 23, 23, 23))
     ]
     suivi = moteur.Suivi(anciens)
     suivi._debut = MAINTENANT - timedelta(hours=1, minutes=24)
@@ -165,7 +176,55 @@ def suivi_npsso() -> moteur.Suivi:
     return suivi
 
 
-def dessiner(suivi: moteur.Suivi, largeur: int, hauteur: int, chemin: Path) -> None:
+def suivi_pause() -> moteur.Suivi:
+    """La pause minutée (touche 2), avec les demandes qui attendent."""
+    suivi = suivi_demo()
+    evenement(
+        suivi,
+        160,
+        logging.INFO,
+        "info",
+        "Pause de 10 min : reprise automatique à 21:11.",
+    )
+    suivi.statut(moteur.Statut.PAUSE, "Les demandes attendent · P : reprendre")
+    suivi.en_attente(
+        [
+            moteur.Attente(pseudo, MAINTENANT - timedelta(seconds=secondes), "en pause")
+            for pseudo, secondes in (
+                ("Riko_Spectre", 25),
+                ("Alba-Rush", 74),
+                ("Sn1per_Lou", 132),
+            )
+        ]
+    )
+    return suivi
+
+
+def interface_pause() -> tb.EtatInterface:
+    return tb.EtatInterface(reprise_a=time.monotonic() + 437, duree_pause=600)
+
+
+def interface_aide() -> tb.EtatInterface:
+    jour = MAINTENANT.date()
+    ajouts = (37, 52, 18, 0, 64, 41, 29)
+    retraits = (1, 3, 0, 0, 2, 1, 0)
+    return tb.EtatInterface(
+        aide=True,
+        statistiques=[
+            (jour - timedelta(days=rang), ajouts[rang], retraits[rang])
+            for rang in range(7)
+        ],
+    )
+
+
+def dessiner(
+    suivi: moteur.Suivi,
+    largeur: int,
+    hauteur: int,
+    chemin: Path,
+    interface: tb.EtatInterface | None = None,
+    theme: str = "sombre",
+) -> None:
     with Path(os.devnull).open("w", encoding="utf-8") as nul:
         console = Console(
             record=True,
@@ -174,12 +233,14 @@ def dessiner(suivi: moteur.Suivi, largeur: int, hauteur: int, chemin: Path) -> N
             force_terminal=True,
             legacy_windows=False,
             color_system="truecolor",
-            theme=tb.THEME,
+            theme=tb.THEMES[theme],
             file=nul,
         )
         instant = suivi.instantane()
         console.print(
-            tb.construire_ecran(instant, tb.EtatInterface(), largeur, hauteur)
+            tb.construire_ecran(
+                instant, interface or tb.EtatInterface(), largeur, hauteur
+            )
         )
         # Écrit avec des fins de ligne LF, comme le reste du dépôt.
         svg = console.export_svg(title=tb.titre_fenetre(instant))
@@ -202,13 +263,16 @@ def main() -> int:
 
     demo = suivi_demo()
     captures = {
-        "tableau-de-bord.svg": (demo, 132, 36),
-        "cartes-compactes.svg": (demo, 86, 26),
-        "resume.svg": (demo, 52, 18),
-        "code-npsso.svg": (suivi_npsso(), 110, 32),
+        "tableau-de-bord.svg": (demo, 132, 36, None, "sombre"),
+        "cartes-compactes.svg": (demo, 86, 26, None, "sombre"),
+        "resume.svg": (demo, 52, 18, None, "sombre"),
+        "code-npsso.svg": (suivi_npsso(), 110, 32, None, "sombre"),
+        "pause.svg": (suivi_pause(), 132, 36, interface_pause(), "sombre"),
+        "aide.svg": (demo, 132, 40, interface_aide(), "sombre"),
+        "theme-daltonien.svg": (demo, 132, 36, None, "daltonien"),
     }
-    for nom, (suivi, largeur, hauteur) in captures.items():
-        dessiner(suivi, largeur, hauteur, sortie / nom)
+    for nom, (suivi, largeur, hauteur, interface, theme) in captures.items():
+        dessiner(suivi, largeur, hauteur, sortie / nom, interface, theme)
         print(f"{nom:<22} {largeur} x {hauteur}")
     return 0
 
