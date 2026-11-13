@@ -9,10 +9,12 @@ En ligne de commande, depuis ce dossier :
     .venv\\Scripts\\python.exe accepter_amis.py --simple      affichage texte simple
     .venv\\Scripts\\python.exe accepter_amis.py --configurer  enregistrer le code npsso
                                                               (connecter son compte)
+    Ajoutez --diagnostic pour écrire aussi diagnostic.txt (détails techniques, code
+    npsso toujours masqué), à joindre à un signalement de problème.
 
-Au premier lancement, sans npsso.txt, l'assistant demande le code avant d'ouvrir le
-tableau de bord. Les réglages (intervalle de vérification, pauses...) sont en haut de
-moteur.py.
+Au premier lancement, sans code enregistré, l'assistant demande le code avant d'ouvrir
+le tableau de bord. Les réglages (intervalle de vérification, thème, notifications...)
+sont dans reglages.toml, créé au premier lancement.
 """
 
 from __future__ import annotations
@@ -126,8 +128,15 @@ def main() -> int:
         action="store_true",
         help="enregistre le code npsso (connecte votre compte), puis s'arrête",
     )
+    parametres.add_argument(
+        "--diagnostic",
+        action="store_true",
+        help="écrit aussi diagnostic.txt, avec les détails techniques (code masqué)",
+    )
     choix = parametres.parse_args()
 
+    # Les réglages d'abord : ils disent notamment où ranger le code npsso.
+    _, problemes_reglages = moteur.charger_reglages()
     if choix.configurer:
         return 0 if moteur.assistant_npsso() else 1
 
@@ -139,10 +148,14 @@ def main() -> int:
         except ImportError:
             tableau_de_bord = None
         # Premier lancement : on demande le code avant d'ouvrir le tableau de bord.
-        if tableau_de_bord is not None and not moteur.FICHIER_NPSSO.exists():
+        if tableau_de_bord is not None and not moteur.code_present():
             moteur.assistant_npsso()
 
-    moteur.configurer_journal(ecran=tableau_de_bord is None, fichier=not choix.test)
+    moteur.configurer_journal(
+        ecran=tableau_de_bord is None,
+        fichier=not choix.test,
+        diagnostic=choix.diagnostic,
+    )
     verrou = moteur.verrouiller_instance()
     if verrou is None:
         print(
@@ -152,7 +165,7 @@ def main() -> int:
         return 1
     moteur.baisser_priorite()
     suivi = moteur.Suivi(
-        moteur.ajouts_du_jour_dans_journal(), moteur.retraits_du_jour_dans_journal()
+        moteur.ajouts_recents_dans_journal(), moteur.retraits_recents_dans_journal()
     )
     commandes = moteur.Commandes()
     fin = Fin(suivi, commandes, verrou, noter=not choix.test)
@@ -170,6 +183,14 @@ def main() -> int:
         journal.addHandler(tableau_de_bord.VersTableau(suivi))
     surveiller_fermeture_fenetre(fin)
     journal.info("=== Démarrage de PSN Amis ===")
+    for probleme in problemes_reglages:
+        journal.warning("%s", probleme)
+    if choix.diagnostic:
+        journal.info(
+            "Mode diagnostic : détails techniques écrits dans %s.",
+            moteur.FICHIER_DIAGNOSTIC.name,
+        )
+    moteur.signaler_nouvelle_version()
     raison = "Ctrl+C"
     try:
         if tableau_de_bord is not None:

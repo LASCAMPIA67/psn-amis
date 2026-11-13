@@ -5,8 +5,9 @@ seconde. La mise en page suit la taille de la fenêtre, qui change aussi avec le
 (Ctrl+molette) : grandes cartes, cartes compactes, puis un simple résumé quand la
 place manque. Les messages d'activité sont toujours affichés en entier.
 
-Touches : P pause ou reprise, V vérifier maintenant, J ouvrir le journal,
-Q deux fois pour quitter (Ctrl+C quitte aussi).
+Touches : P pause ou reprise, 1 2 3 pause de 5, 10 ou 30 min, V vérifier maintenant,
+J ouvrir le journal, C changer le code npsso, H aide, S bip à chaque ajout,
+flèches pour faire défiler l'activité, Q deux fois pour quitter (Ctrl+C quitte aussi).
 """
 
 from __future__ import annotations
@@ -19,8 +20,8 @@ import os
 import threading
 import time
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import date, datetime
 
 from rich import box
 from rich.console import Console, ConsoleOptions, Group, RenderableType, RenderResult
@@ -35,25 +36,65 @@ from rich.text import Text
 from rich.theme import Theme
 
 import moteur
+import notifications
 from moteur import Commandes, Evenement, Instantane, Statut, Suivi, journal
 
 # ─── Apparence ────────────────────────────────────────────────────────────────
-THEME = Theme(
-    {
-        "accent": "bold #3d9bff",
-        "titre": "bold #f2f5fa",
-        "discret": "#8a93a6",
-        "info": "#8ec5ff",
-        "succes": "bold #34d27b",
-        "alerte": "bold #ffc24b",
-        "erreur": "bold #ff5d5d",
-        "fond_barre": "#2a3142",
-        "fond_entete": "on #0f2747",
-        "touche": "bold #0b1220 on #3d9bff",
-        "nouveau": "bold #0b1220 on #34d27b",
-        "retrait": "bold #ff8f6b",
-    }
-)
+# Trois jeux de couleurs, choisis dans reglages.toml (réglage « theme »).
+THEMES: dict[str, Theme] = {
+    "sombre": Theme(
+        {
+            "accent": "bold #3d9bff",
+            "titre": "bold #f2f5fa",
+            "discret": "#8a93a6",
+            "info": "#8ec5ff",
+            "succes": "bold #34d27b",
+            "alerte": "bold #ffc24b",
+            "erreur": "bold #ff5d5d",
+            "fond_barre": "#2a3142",
+            "fond_entete": "on #0f2747",
+            "touche": "bold #0b1220 on #3d9bff",
+            "nouveau": "bold #0b1220 on #34d27b",
+            "retrait": "bold #ff8f6b",
+        }
+    ),
+    # Couleurs moins vives, plus reposantes pour un affichage permanent.
+    "doux": Theme(
+        {
+            "accent": "bold #7aa2c8",
+            "titre": "bold #e6e9ef",
+            "discret": "#7d8594",
+            "info": "#a9c4de",
+            "succes": "bold #8cc7a1",
+            "alerte": "bold #e3c27a",
+            "erreur": "bold #e08a8a",
+            "fond_barre": "#2a3040",
+            "fond_entete": "on #1d2a3a",
+            "touche": "bold #10151f on #7aa2c8",
+            "nouveau": "bold #10151f on #8cc7a1",
+            "retrait": "bold #e0a48c",
+        }
+    ),
+    # Palette d'Okabe et Ito : bleu, jaune, orange et violet, faciles à distinguer
+    # sans le rouge et le vert.
+    "daltonien": Theme(
+        {
+            "accent": "bold #b8c4ff",
+            "titre": "bold #f2f5fa",
+            "discret": "#9097a6",
+            "info": "#a6d4f2",
+            "succes": "bold #56b4e9",
+            "alerte": "bold #f0e442",
+            "erreur": "bold #e69f00",
+            "fond_barre": "#2a3142",
+            "fond_entete": "on #1f2547",
+            "touche": "bold #0b1220 on #b8c4ff",
+            "nouveau": "bold #0b1220 on #56b4e9",
+            "retrait": "bold #cc79a7",
+        }
+    ),
+}
+THEME = THEMES["sombre"]
 
 # Pour chaque statut : symbole, libellé, couleur.
 APPARENCE: dict[Statut, tuple[str, str, str]] = {
@@ -83,8 +124,29 @@ GROS_CHIFFRES = {
     "8": ("┏━┓", "┣━┫", "┗━┛"),
     "9": ("┏━┓", "┗━┫", "╺━┛"),
 }
+# Hauteurs des barres de l'histogramme des dernières 24 heures.
+BARRES = "▁▂▃▄▅▆▇█"
 # Un ajout reste surligné en vert pendant ce nombre de secondes.
 DUREE_SURBRILLANCE = 10
+# Pauses minutées : touche -> minutes.
+PAUSES_MINUTEES = {"1": 5, "2": 10, "3": 30}
+# Défilement de l'activité : touche -> nombre de messages (None : retour en haut).
+DEFILEMENT: dict[str, int | None] = {
+    "haut": -1,
+    "bas": 1,
+    "page_haut": -5,
+    "page_bas": 5,
+    "debut": None,
+}
+# Touches spéciales : second caractère renvoyé par Windows -> nom.
+TOUCHES_SPECIALES = {
+    "H": "haut",
+    "P": "bas",
+    "I": "page_haut",
+    "Q": "page_bas",
+    "G": "debut",
+}
+JOURS = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
 
 
 def apparence_evenement(evenement: Evenement) -> tuple[str, str]:
@@ -180,12 +242,13 @@ def il_y_a(moment: datetime, maintenant: datetime) -> str:
     return f"il y a {heures} h {minutes:02d}"
 
 
-def duree_lisible(secondes: float) -> str:
+def duree_compacte(secondes: float) -> str:
+    """« 40 s », « 12 min », « 1 h 24 » : tient dans une carte étroite."""
     minutes = int(secondes) // 60
     if minutes < 1:
         return f"{int(secondes)} s"
     heures, minutes = divmod(minutes, 60)
-    return f"{heures} h {minutes:02d} min" if heures else f"{minutes} min"
+    return f"{heures} h {minutes:02d}" if heures else f"{minutes} min"
 
 
 def duree_courte(secondes: float) -> str:
@@ -196,11 +259,30 @@ def duree_courte(secondes: float) -> str:
     return f"{minutes} min {secondes:02d} s"
 
 
-def carte(titre: str, contenu: RenderableType, bordure: str = "accent") -> Panel:
+def pluriel(nombre: int, mot: str) -> str:
+    """« 1 retrait », « 2 retraits »."""
+    return f"{nombre} {mot}" if nombre <= 1 else f"{nombre} {mot}s"
+
+
+def rythme_par_heure(nombre: int, secondes: float) -> str | None:
+    """« 4,2 » ajouts par heure, ou None si c'est trop tôt pour le dire (< 10 min)."""
+    if nombre == 0 or secondes < 600:
+        return None
+    return f"{nombre * 3600 / secondes:.1f}".replace(".", ",")
+
+
+def carte(
+    titre: str,
+    contenu: RenderableType,
+    bordure: str = "accent",
+    sous_titre: str | None = None,
+) -> Panel:
     return Panel(
         contenu,
         title=Text(f" {titre} ", style="titre"),
         title_align="left",
+        subtitle=Text(f" {sous_titre} ", style="discret") if sous_titre else None,
+        subtitle_align="right",
         border_style=bordure,
         box=box.ROUNDED,
         padding=(0, 1),
@@ -237,14 +319,39 @@ def barre(total: float, rempli: float, couleur: str, fin: str | None = None) -> 
     return grille
 
 
+def histogramme(instant: Instantane, maintenant: datetime) -> tuple[Text, int]:
+    """Les ajouts des dernières 24 heures, heure par heure (la plus récente à droite),
+    et leur total."""
+    par_heure = [0] * 24
+    for ajout in instant.derniers_ajouts:
+        heures = int((maintenant - ajout.moment).total_seconds() // 3600)
+        if 0 <= heures < 24:
+            par_heure[23 - heures] += 1
+    plus_haut = max(par_heure)
+    dessin = Text(no_wrap=True)
+    for nombre in par_heure:
+        if nombre == 0:
+            dessin.append(BARRES[0], style="fond_barre")
+        else:
+            niveau = math.ceil(nombre / plus_haut * len(BARRES)) - 1
+            dessin.append(BARRES[niveau], style="succes")
+    return dessin, sum(par_heure)
+
+
 # ─── En-tête et cartes ────────────────────────────────────────────────────────
 def entete(
-    instant: Instantane, maintenant: datetime, disposition: Disposition, largeur: int
+    instant: Instantane,
+    maintenant: datetime,
+    disposition: Disposition,
+    largeur: int,
+    son: bool = False,
 ) -> RenderableType:
     gauche = Text.assemble(("◆ PSN AMIS", "accent"), (f" {moteur.VERSION}", "discret"))
     if largeur >= 90:
         gauche.append("   acceptation automatique des demandes d'amis", style="discret")
     droite = Text()
+    if son and largeur >= 40:
+        droite.append("♪ ", style="accent")
     if largeur >= 50:
         if largeur >= 70:
             droite.append("compte ", style="discret")
@@ -275,18 +382,53 @@ def ligne_statut(instant: Instantane) -> Text:
     )
 
 
-def ligne_detail(instant: Instantane) -> RenderableType:
+def detail_affiche(instant: Instantane, maintenant: datetime) -> str:
+    """Le texte sous le statut : « Dernier ajout il y a 3 min » quand tout est calme."""
+    if instant.statut == Statut.EN_MARCHE and instant.derniers_ajouts:
+        return f"Dernier ajout {il_y_a(instant.derniers_ajouts[0].moment, maintenant)}"
+    return instant.detail
+
+
+def ligne_detail(instant: Instantane, maintenant: datetime) -> RenderableType:
     if instant.statut in STATUTS_ANIMES:
         animation = Spinner(
             "dots", text=Text(f" {instant.detail}", style="info"), style="info"
         )
         return une_ligne(animation)
-    return Text(instant.detail, style="discret", no_wrap=True, overflow="ellipsis")
+    return Text(
+        detail_affiche(instant, maintenant),
+        style="discret",
+        no_wrap=True,
+        overflow="ellipsis",
+    )
 
 
-def compte_a_rebours(instant: Instantane) -> list[RenderableType] | None:
+@dataclass(frozen=True)
+class Reprise:
+    """Pause minutée (touches 1, 2, 3) : moment de la reprise et durée totale."""
+
+    fin: float
+    duree: float
+
+
+def compte_a_rebours(
+    instant: Instantane, reprise: Reprise | None = None
+) -> list[RenderableType] | None:
     """Texte « Vérification dans 12 s » et sa barre, ou None s'il n'y a pas d'attente."""
-    if instant.prochaine_verification is None or instant.statut == Statut.PAUSE:
+    if instant.statut == Statut.PAUSE:
+        if reprise is None:
+            return None
+        reste = max(reprise.fin - time.monotonic(), 0.0)
+        return [
+            Text(
+                f"Reprise dans {duree_courte(reste)}",
+                style="info",
+                no_wrap=True,
+                overflow="ellipsis",
+            ),
+            barre(reprise.duree, reprise.duree - reste, "alerte"),
+        ]
+    if instant.prochaine_verification is None:
         return None
     reste = max(instant.prochaine_verification - time.monotonic(), 0.0)
     verbe = (
@@ -320,16 +462,22 @@ def ligne_infos(instant: Instantane) -> Text:
     )
 
 
-def carte_statut(instant: Instantane, gros: bool) -> Panel:
+def carte_statut(
+    instant: Instantane,
+    gros: bool,
+    maintenant: datetime | None = None,
+    reprise: Reprise | None = None,
+) -> Panel:
+    maintenant = maintenant or datetime.now()
     couleur = APPARENCE[instant.statut][2]
-    rebours = compte_a_rebours(instant)
+    rebours = compte_a_rebours(instant, reprise)
     lignes: list[RenderableType] = [ligne_statut(instant)]
     if gros:
-        lignes.append(ligne_detail(instant))
+        lignes.append(ligne_detail(instant, maintenant))
         lignes += rebours or [Text(""), Text("")]
         lignes.append(ligne_infos(instant))
     else:
-        lignes += rebours or [ligne_detail(instant), Text("")]
+        lignes += rebours or [ligne_detail(instant, maintenant), Text("")]
     return carte("Statut", Group(*lignes), bordure=couleur)
 
 
@@ -353,11 +501,13 @@ def carte_jour(instant: Instantane, maintenant: datetime, gros: bool) -> Panel:
         info = ligne_centree(
             ("dernier à ", "discret"), (dernier.moment.strftime("%H:%M:%S"), "info")
         )
-    contenu = Group(
-        nombre_carte(nombre, "succes", gros),
-        ligne_centree(("ajout" if nombre == 1 else "ajouts", "discret")),
-        info,
-    )
+    libelle = [("ajout" if nombre == 1 else "ajouts", "discret")]
+    if instant.retraits_jour:
+        libelle += [
+            (" · ", "discret"),
+            (pluriel(instant.retraits_jour, "retrait"), "retrait"),
+        ]
+    contenu = Group(nombre_carte(nombre, "succes", gros), ligne_centree(*libelle), info)
     return carte("Aujourd'hui", contenu, bordure="succes" if recent else "accent")
 
 
@@ -365,14 +515,18 @@ def carte_session(
     instant: Instantane, maintenant: datetime, gros: bool, largeur_carte: int
 ) -> Panel:
     nombre = instant.ajouts_session
-    depuis = duree_lisible((maintenant - instant.debut).total_seconds())
+    ecoule = (maintenant - instant.debut).total_seconds()
+    libelle = [("ajout" if nombre == 1 else "ajouts", "discret")]
+    rythme = rythme_par_heure(nombre, ecoule)
+    if rythme:
+        libelle += [(" · ", "discret"), (rythme, "info"), (" par heure", "discret")]
     contenu = Group(
         nombre_carte(nombre, "titre", gros),
-        ligne_centree(("ajout" if nombre == 1 else "ajouts", "discret")),
+        ligne_centree(*libelle),
         ligne_centree(
             ("lancé à ", "discret"),
             (instant.debut.strftime("%H:%M"), "info"),
-            (f" · {depuis}", "discret"),
+            (f" · {duree_compacte(ecoule)}", "discret"),
         ),
     )
     # Carte étroite : un titre plus court, plutôt que coupé.
@@ -410,10 +564,12 @@ def carte_amis(
     return carte(titre, contenu, bordure=couleur if part >= 0.8 else "accent")
 
 
-def carte_resume(instant: Instantane) -> Panel:
+def carte_resume(
+    instant: Instantane, maintenant: datetime, reprise: Reprise | None = None
+) -> Panel:
     """Fenêtre très étroite : l'essentiel sur une seule carte de trois lignes."""
     couleur = APPARENCE[instant.statut][2]
-    rebours = compte_a_rebours(instant)
+    rebours = compte_a_rebours(instant, reprise)
     amis = "—" if instant.nombre_amis is None else str(instant.nombre_amis)
     chiffres = Text.assemble(
         ("aujourd'hui ", "discret"),
@@ -425,7 +581,7 @@ def carte_resume(instant: Instantane) -> Panel:
         no_wrap=True,
         overflow="ellipsis",
     )
-    deuxieme = rebours[0] if rebours else ligne_detail(instant)
+    deuxieme = rebours[0] if rebours else ligne_detail(instant, maintenant)
     return carte(
         "PSN Amis", Group(ligne_statut(instant), deuxieme, chiffres), bordure=couleur
     )
@@ -433,8 +589,9 @@ def carte_resume(instant: Instantane) -> Panel:
 
 # ─── Panneaux du bas ──────────────────────────────────────────────────────────
 class ListeAjouts:
-    """Contenu de « Derniers ajouts » : autant de lignes qu'il en tient en hauteur,
-    et des colonnes qui disparaissent quand la largeur manque."""
+    """Contenu de « Derniers ajouts » : l'histogramme des dernières 24 heures, puis
+    autant de lignes qu'il en tient en hauteur ; des colonnes disparaissent quand la
+    largeur manque."""
 
     def __init__(self, instant: Instantane, maintenant: datetime) -> None:
         self._instant = instant
@@ -448,9 +605,19 @@ class ListeAjouts:
             yield Text("En attente du premier ajout…", style="discret")
             return
         largeur = options.max_width
-        hauteur = options.height if options.height is not None else len(ajouts) + 1
+        hauteur = options.height if options.height is not None else len(ajouts) + 2
         avec_numero = largeur >= 36
         avec_anciennete = largeur >= 46
+
+        # Histogramme sur la première ligne, s'il reste de la place pour la liste.
+        if largeur >= 34 and hauteur >= 6:
+            dessin, total = histogramme(self._instant, self._maintenant)
+            ligne = Text("24 h ", style="discret", no_wrap=True, overflow="ellipsis")
+            ligne.append_text(dessin)
+            if largeur >= 46:
+                ligne.append(f"  {pluriel(total, 'ajout')}", style="discret")
+            yield ligne
+            hauteur -= 1
 
         tableau = Table(
             box=None,
@@ -503,13 +670,53 @@ class ListeAjouts:
         yield tableau
 
 
+class ListeAttentes:
+    """Contenu de « Demandes en attente » (pendant une pause) : pseudo et ancienneté."""
+
+    def __init__(self, instant: Instantane, maintenant: datetime) -> None:
+        self._instant = instant
+        self._maintenant = maintenant
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        attentes = self._instant.attentes
+        hauteur = options.height if options.height is not None else len(attentes) + 1
+        tableau = Table(
+            box=None,
+            expand=True,
+            pad_edge=False,
+            header_style="discret",
+            padding=(0, 1),
+        )
+        tableau.add_column(
+            "Pseudo", style="titre", ratio=1, no_wrap=True, overflow="ellipsis"
+        )
+        tableau.add_column("Demande envoyée", style="discret", no_wrap=True)
+        visibles = attentes[: max(hauteur - 1, 1)]
+        if len(attentes) > len(visibles):
+            # Dernière ligne : le nombre de demandes qui ne tiennent pas.
+            visibles = visibles[:-1]
+        for attente in visibles:
+            depuis = il_y_a(attente.depuis, self._maintenant) if attente.depuis else "—"
+            tableau.add_row(attente.pseudo, depuis)
+        if len(attentes) > len(visibles):
+            tableau.add_row(
+                Text(f"… et {len(attentes) - len(visibles)} autre(s)", style="discret"),
+                "",
+            )
+        yield tableau
+
+
 class FilActivite:
     """Contenu de « Activité » : chaque message en entier, renvoyé à la ligne si
     besoin, du plus récent au plus ancien, autant qu'il en tient en hauteur.
-    Un message qui ne tient plus en entier n'est pas affiché à moitié."""
+    Un message qui ne tient plus en entier n'est pas affiché à moitié.
+    `decalage` messages récents sont sautés (défilement avec les flèches)."""
 
-    def __init__(self, evenements: tuple[Evenement, ...]) -> None:
+    def __init__(self, evenements: tuple[Evenement, ...], decalage: int = 0) -> None:
         self._evenements = evenements
+        self._decalage = decalage
 
     def __rich_console__(
         self, console: Console, options: ConsoleOptions
@@ -524,7 +731,7 @@ class FilActivite:
         aujourd_hui = datetime.now().date()
 
         lignes: list[Text] = []
-        for evenement in self._evenements:
+        for evenement in self._evenements[self._decalage :]:
             symbole, couleur = apparence_evenement(evenement)
             debut = Text()
             if avec_heure:
@@ -556,7 +763,23 @@ def panneau_ajouts(instant: Instantane, maintenant: datetime) -> Panel:
     return carte("Derniers ajouts", ListeAjouts(instant, maintenant))
 
 
-def panneau_activite(instant: Instantane) -> Panel:
+def panneau_attentes(instant: Instantane, maintenant: datetime) -> Panel:
+    return carte(
+        f"Demandes en attente · {len(instant.attentes)}",
+        ListeAttentes(instant, maintenant),
+        bordure="alerte",
+        sous_titre="acceptées à la reprise",
+    )
+
+
+def panneau_activite(instant: Instantane, decalage: int = 0) -> Panel:
+    if decalage:
+        return carte(
+            "Activité",
+            FilActivite(instant.evenements, decalage),
+            bordure="info",
+            sous_titre=f"{decalage} plus récent(s) au-dessus · ↑ ou Origine",
+        )
     return carte("Activité", FilActivite(instant.evenements))
 
 
@@ -590,6 +813,139 @@ def panneau_npsso(instant: Instantane) -> Panel:
     )
 
 
+def panneau_aide(interface: EtatInterface, largeur: int) -> Panel:
+    """Touche H : les touches, les symboles et les 7 derniers jours."""
+    touches = Table.grid(padding=(0, 1))
+    touches.add_column(no_wrap=True)
+    touches.add_column()
+    son = "activé" if interface.son else "coupé"
+    for touche, explication in (
+        ("P", "Pause, ou reprise"),
+        ("1 2 3", "Pause de 5, 10 ou 30 min, puis reprise toute seule"),
+        ("V", "Vérifier maintenant"),
+        ("J", "Ouvrir le journal (journal.txt)"),
+        ("C", "Changer le code npsso (autre compte)"),
+        ("S", f"Bip à chaque ajout (en ce moment : {son})"),
+        ("↑ ↓", "Faire défiler l'activité (Pg.préc. et Pg.suiv. : plus vite)"),
+        ("Origine", "Revenir aux messages les plus récents"),
+        ("H", "Afficher ou cacher cette aide (Échap aussi)"),
+        ("Q", "Quitter (deux fois de suite) ; Ctrl+C quitte aussi"),
+    ):
+        touches.add_row(Text.assemble((f" {touche} ", "touche")), Text(explication))
+
+    symboles = Table.grid(padding=(0, 1))
+    symboles.add_column(no_wrap=True)
+    symboles.add_column()
+    for symbole, style, explication in (
+        ("✓", "succes", "Demande d'ami acceptée"),
+        ("▼", "retrait", "Ami retiré (il vous a retiré, ou vous l'avez retiré)"),
+        ("▲", "alerte", "Avertissement : le script réessaie tout seul"),
+        ("✗", "erreur", "Erreur"),
+        ("•", "info", "Information"),
+        ("♪", "accent", "Le bip à chaque ajout est activé"),
+    ):
+        symboles.add_row(Text(symbole, style=style), Text(explication))
+
+    jours = Table(box=box.SIMPLE_HEAD, header_style="discret", pad_edge=False)
+    jours.add_column("Jour", no_wrap=True)
+    jours.add_column("Ajouts", justify="right", style="succes")
+    jours.add_column("Retraits", justify="right", style="retrait")
+    for jour, ajouts, retraits in interface.statistiques:
+        nom = "aujourd'hui" if jour == date.today() else JOURS[jour.weekday()]
+        jours.add_row(f"{nom} {jour:%d/%m}", str(ajouts), str(retraits))
+    if interface.statistiques:
+        jours.add_row(
+            Text("Total", style="titre"),
+            str(sum(s[1] for s in interface.statistiques)),
+            str(sum(s[2] for s in interface.statistiques)),
+        )
+
+    reglages = moteur.REGLAGES
+    pied_aide = Text(
+        f"Réglages : {moteur.FICHIER_REGLAGES.name} (thème {reglages.theme}, "
+        f"vérification toutes les {moteur.INTERVALLE_VERIFICATION} s). "
+        "Modifiez-le avec le Bloc-notes, puis relancez PSN Amis.",
+        style="discret",
+    )
+    blocs = [
+        Group(Text("Touches", style="accent"), touches),
+        Group(Text("Symboles", style="accent"), symboles),
+        Group(Text("7 derniers jours (journal.txt)", style="accent"), jours),
+    ]
+    if largeur >= 110:
+        grille = Table.grid(expand=True, padding=(0, 3))
+        grille.add_column(ratio=4)
+        grille.add_column(ratio=3)
+        grille.add_column(no_wrap=True)
+        grille.add_row(*blocs)
+        contenu = Group(grille, Text(""), pied_aide)
+    else:
+        contenu = Group(*(Group(bloc, Text("")) for bloc in blocs), pied_aide)
+    return Panel(
+        contenu,
+        title=Text(" Aide · H ou Échap pour fermer ", style="titre"),
+        title_align="left",
+        border_style="accent",
+        box=box.HEAVY,
+        padding=(0, 1),
+    )
+
+
+def touches_du_pied(instant: Instantane, largeur_max: int) -> Text:
+    """Les touches et leur libellé, du plus détaillé au plus court selon la place."""
+    en_pause = instant.statut == Statut.PAUSE
+    paliers: list[tuple[tuple[str, ...], str]] = [
+        (
+            (
+                "Reprendre" if en_pause else "Pause",
+                "Vérifier maintenant",
+                "Journal",
+                "Code npsso",
+                "Aide",
+                "Son",
+                "Quitter",
+            ),
+            "   ",
+        ),
+        (
+            (
+                "Reprendre" if en_pause else "Pause",
+                "Vérifier",
+                "Journal",
+                "Code",
+                "Aide",
+                "Son",
+                "Quitter",
+            ),
+            "  ",
+        ),
+        (
+            (
+                "reprise" if en_pause else "pause",
+                "vérif.",
+                "journal",
+                "code",
+                "aide",
+                "son",
+                "quitter",
+            ),
+            " ",
+        ),
+        (("",) * 7, " "),
+    ]
+    for libelles, separation in paliers:
+        touches = Text(no_wrap=True, overflow="ellipsis")
+        for rang, (lettre, libelle) in enumerate(zip("PVJCHSQ", libelles, strict=True)):
+            if rang:
+                touches.append(separation)
+            touches.append(f" {lettre} ", style="touche")
+            if libelle:
+                touches.append(f" {libelle}", style="discret")
+        if touches.cell_len <= largeur_max:
+            return touches
+    return touches
+
+
 def pied(instant: Instantane, interface: EtatInterface, largeur: int) -> Table | Text:
     if interface.confirmation_quitter():
         return Text(
@@ -598,30 +954,12 @@ def pied(instant: Instantane, interface: EtatInterface, largeur: int) -> Table |
             no_wrap=True,
             overflow="ellipsis",
         )
-    pause = "Reprendre" if instant.statut == Statut.PAUSE else "Pause"
-    if largeur >= 96:
-        libelles = (pause, "Vérifier maintenant", "Journal", "Code npsso", "Quitter")
-    elif largeur >= 64:
-        libelles = (pause, "Vérifier", "Journal", "Code", "Quitter")
-    elif largeur >= 54:
-        libelles = (pause.lower(), "vérif.", "journal", "code", "quitter")
-    else:
-        libelles = ("", "", "", "", "")
-    # Moins de place : les touches se rapprochent.
-    separation = "   " if largeur >= 64 else " "
-    touches = Text(no_wrap=True, overflow="ellipsis")
-    for rang, (lettre, libelle) in enumerate(zip("PVJCQ", libelles, strict=True)):
-        if rang:
-            touches.append(separation)
-        touches.append(f" {lettre} ", style="touche")
-        if libelle:
-            touches.append(f" {libelle}", style="discret")
-
     message = interface.message_actuel()
-    if message:
-        droite = Text(message, style="info")
-    else:
-        droite = Text("journal.txt" if largeur >= 110 else "", style="discret")
+    # Un message à droite : les libellés des touches raccourcissent pour lui laisser
+    # de la place.
+    reserve = len(message) + 2 if message else 0
+    touches = touches_du_pied(instant, largeur - reserve)
+    droite = Text(message or "", style="info")
     grille = Table.grid(expand=True)
     grille.add_column(no_wrap=True)
     grille.add_column(justify="right", ratio=1, no_wrap=True, overflow="ellipsis")
@@ -634,10 +972,11 @@ def construire_ecran(
 ) -> Layout:
     maintenant = datetime.now()
     disposition = Disposition.pour(largeur, hauteur)
+    reprise = interface.reprise()
     ecran = Layout()
     ecran.split_column(
         Layout(
-            entete(instant, maintenant, disposition, largeur),
+            entete(instant, maintenant, disposition, largeur, son=interface.son),
             size=disposition.hauteur_entete,
         ),
         Layout(name="cartes", size=disposition.hauteur_cartes),
@@ -647,12 +986,12 @@ def construire_ecran(
 
     gros = disposition.gros_chiffres
     if disposition.colonnes == 1:
-        ecran["cartes"].update(carte_resume(instant))
+        ecran["cartes"].update(carte_resume(instant, maintenant, reprise))
     else:
         # Largeur approximative d'une carte, pour choisir des titres qui tiennent.
         largeur_carte = largeur * 2 // 9 if disposition.colonnes == 4 else largeur // 2
         cartes = [
-            carte_statut(instant, gros),
+            carte_statut(instant, gros, maintenant, reprise),
             carte_jour(instant, maintenant, gros),
             carte_session(instant, maintenant, gros, largeur_carte),
             carte_amis(instant, maintenant, gros, largeur_carte),
@@ -670,27 +1009,31 @@ def construire_ecran(
             ecran["bas"].split_row(Layout(cartes[2]), Layout(cartes[3]))
 
     corps = ecran["corps"]
+    if interface.aide:
+        corps.update(panneau_aide(interface, largeur))
+        return ecran
     if instant.probleme_npsso:
         corps.update(panneau_npsso(instant))
-    elif disposition.cote_a_cote:
-        corps.split_row(
-            Layout(panneau_ajouts(instant, maintenant), ratio=2),
-            Layout(panneau_activite(instant), ratio=3),
-        )
-    elif disposition.avec_ajouts:
-        corps.split_column(
-            Layout(panneau_ajouts(instant, maintenant), ratio=2),
-            Layout(panneau_activite(instant), ratio=3),
-        )
+        return ecran
+    # En pause, les demandes qui attendent remplacent « Derniers ajouts ».
+    if instant.statut == Statut.PAUSE and instant.attentes:
+        haut = panneau_attentes(instant, maintenant)
     else:
-        corps.update(panneau_activite(instant))
+        haut = panneau_ajouts(instant, maintenant)
+    activite = panneau_activite(instant, interface.decalage(instant.evenements))
+    if disposition.cote_a_cote:
+        corps.split_row(Layout(haut, ratio=2), Layout(activite, ratio=3))
+    elif disposition.avec_ajouts:
+        corps.split_column(Layout(haut, ratio=2), Layout(activite, ratio=3))
+    else:
+        corps.update(activite)
     return ecran
 
 
 def titre_fenetre(instant: Instantane) -> str:
     libelle = APPARENCE[instant.statut][1].lower()
-    pluriel = "s" if instant.ajouts_jour > 1 else ""
-    return f"PSN Amis · {instant.ajouts_jour} ajout{pluriel} aujourd'hui · {libelle}"
+    pluriel_ajouts = "s" if instant.ajouts_jour > 1 else ""
+    return f"PSN Amis · {instant.ajouts_jour} ajout{pluriel_ajouts} aujourd'hui · {libelle}"
 
 
 # ─── Journal → panneau « Activité » ───────────────────────────────────────────
@@ -730,6 +1073,19 @@ class EtatInterface:
     quitter_avant: float = 0.0
     message: str = ""
     message_jusqua: float = 0.0
+    # Panneau d'aide (touche H) et ses statistiques des 7 derniers jours.
+    aide: bool = False
+    statistiques: list[tuple[date, int, int]] = field(default_factory=list)
+    # Bip à chaque ajout (touche S).
+    son: bool = False
+    # Pause minutée (touches 1, 2, 3).
+    reprise_a: float | None = None
+    duree_pause: float = 0.0
+    # Défilement de l'activité : le message affiché tout en haut (None : le plus
+    # récent). Repéré par le message lui-même, pour que l'affichage ne bouge pas
+    # quand de nouveaux messages arrivent.
+    ancre: Evenement | None = None
+    evenements: tuple[Evenement, ...] = ()
 
     def confirmation_quitter(self) -> bool:
         return time.monotonic() < self.quitter_avant
@@ -740,6 +1096,32 @@ class EtatInterface:
 
     def message_actuel(self) -> str | None:
         return self.message if time.monotonic() < self.message_jusqua else None
+
+    def reprise(self) -> Reprise | None:
+        if self.reprise_a is None:
+            return None
+        return Reprise(self.reprise_a, self.duree_pause)
+
+    def decalage(self, evenements: tuple[Evenement, ...] | None = None) -> int:
+        """Nombre de messages récents sautés par le défilement."""
+        if evenements is not None:
+            self.evenements = evenements
+        if self.ancre is None:
+            return 0
+        for rang, evenement in enumerate(self.evenements):
+            if evenement is self.ancre:
+                return rang
+        # Message trop ancien, sorti de la liste : retour en haut.
+        self.ancre = None
+        return 0
+
+    def defiler(self, pas: int | None) -> None:
+        """Fait défiler l'activité de `pas` messages ; None revient en haut."""
+        if pas is None or not self.evenements:
+            self.ancre = None
+            return
+        rang = min(max(self.decalage() + pas, 0), len(self.evenements) - 1)
+        self.ancre = self.evenements[rang] if rang else None
 
 
 class Clavier:
@@ -813,6 +1195,8 @@ class Clavier:
     def touches(self, attente_ms: int) -> list[str]:
         """Attend au plus attente_ms qu'une touche soit pressée ; renvoie les touches.
 
+        Les flèches, Pg.préc., Pg.suiv. et Origine sont renvoyées par leur nom
+        (« haut », « page_bas »...), Échap par « echap ».
         Un changement de taille de la fenêtre (ou du zoom) réveille aussi l'attente :
         l'écran est alors redessiné tout de suite à la nouvelle taille.
         """
@@ -834,11 +1218,13 @@ class Clavier:
         lues: list[str] = []
         while msvcrt.kbhit():
             touche = msvcrt.getwch()
-            # Touches spéciales (flèches, F1...) : deux caractères, ignorés.
             if touche in ("\x00", "\xe0"):
-                msvcrt.getwch()
+                # Touche spéciale : un second caractère dit laquelle.
+                nom = TOUCHES_SPECIALES.get(msvcrt.getwch())
+                if nom:
+                    lues.append(nom)
                 continue
-            lues.append(touche)
+            lues.append("echap" if touche == "\x1b" else touche)
         return lues
 
 
@@ -851,6 +1237,32 @@ def ouvrir_journal(interface: EtatInterface) -> None:
         interface.informer("Journal ouvert.")
     except OSError:
         interface.informer("Impossible d'ouvrir le journal.")
+
+
+def pause_minutee(minutes: int, interface: EtatInterface, commandes: Commandes) -> None:
+    """Touches 1, 2, 3 : pause, puis reprise automatique au bout de `minutes`."""
+    if not commandes.pause.is_set():
+        commandes.basculer_pause()
+    interface.duree_pause = minutes * 60
+    interface.reprise_a = time.monotonic() + interface.duree_pause
+    heure = datetime.fromtimestamp(time.time() + interface.duree_pause)
+    journal.info(
+        "Pause de %d min : reprise automatique à %s.", minutes, f"{heure:%H:%M}"
+    )
+
+
+def reprendre_si_l_heure_est_venue(
+    interface: EtatInterface, commandes: Commandes
+) -> None:
+    """Fin d'une pause minutée : relance les acceptations."""
+    if interface.reprise_a is None or time.monotonic() < interface.reprise_a:
+        return
+    interface.reprise_a = None
+    if commandes.pause.is_set():
+        commandes.basculer_pause()
+        journal.info(
+            "Fin de la pause minutée : les demandes sont de nouveau acceptées."
+        )
 
 
 def traiter_touche(
@@ -871,16 +1283,34 @@ def traiter_touche(
         return None
     # Toute autre touche annule la demande de fermeture.
     interface.quitter_avant = 0.0
-    if lettre == "p":
+    if lettre in DEFILEMENT:
+        interface.defiler(DEFILEMENT[lettre])
+    elif lettre == "p":
+        interface.reprise_a = None
         if commandes.basculer_pause():
             journal.info("Pause : les nouvelles demandes attendent (touche P).")
         else:
             journal.info("Reprise : les demandes sont de nouveau acceptées.")
+    elif lettre in PAUSES_MINUTEES:
+        pause_minutee(PAUSES_MINUTEES[lettre], interface, commandes)
     elif lettre == "v":
         commandes.verifier_maintenant()
         interface.informer("Vérification demandée…")
     elif lettre == "j":
         ouvrir_journal(interface)
+    elif lettre == "h":
+        interface.aide = not interface.aide
+        if interface.aide:
+            interface.statistiques = moteur.statistiques_par_jour(7)
+    elif lettre == "echap":
+        interface.aide = False
+    elif lettre == "s":
+        interface.son = not interface.son
+        interface.informer(
+            "Bip à chaque ajout : activé." if interface.son else "Bip coupé."
+        )
+        if interface.son:
+            notifications.bip()
     elif lettre == "c":
         return "configurer"
     return None
@@ -923,8 +1353,9 @@ def lancer(
     demarrer_moteur: Callable[[], threading.Thread],
 ) -> str:
     """Affiche le tableau de bord jusqu'à ce que l'utilisateur quitte ; renvoie la raison."""
-    console = Console(theme=THEME)
-    interface = EtatInterface()
+    reglages = moteur.REGLAGES
+    console = Console(theme=THEMES.get(reglages.theme, THEME))
+    interface = EtatInterface(son=reglages.son)
     titre_actuel = ""
     with (
         Clavier() as clavier,
@@ -932,8 +1363,13 @@ def lancer(
     ):
         fil = demarrer_moteur()
         relance: float | None = None
+        ajouts_vus = 0
         while True:
             instant = suivi.instantane()
+            # Bip pour chaque nouvel ajout (touche S).
+            if instant.ajouts_session > ajouts_vus and interface.son:
+                notifications.bip()
+            ajouts_vus = instant.ajouts_session
             # Taille relue à chaque image : elle suit le redimensionnement et le zoom.
             largeur, hauteur = console.size
             ecran.update(
@@ -952,6 +1388,7 @@ def lancer(
                     changer_le_code(ecran, console, clavier, commandes, interface)
                 elif action:
                     return action
+            reprendre_si_l_heure_est_venue(interface, commandes)
 
             # Si le moteur s'est arrêté par accident, on le relance après 10 s.
             if not fil.is_alive() and not commandes.arret.is_set():
