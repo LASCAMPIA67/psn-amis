@@ -2,6 +2,11 @@
 # teste l'installateur, puis publie la version avec l'installateur et ses empreintes.
 #
 # Rien n'est publié sans une étiquette poussée volontairement par le mainteneur.
+#
+# Préversion : si la variable du dépôt PREVERSION vaut « true », la version est
+# publiée directement comme préversion (jamais affichée, même un instant, comme
+# dernière version stable). Pour la passer ensuite en version stable :
+#   gh release edit vX.Y.Z --prerelease=false --latest
 name: Publication
 
 on:
@@ -99,8 +104,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ETIQUETTE: ${{ github.ref_name }}
+          PREVERSION: ${{ vars.PREVERSION }}
         run: |
           version="${ETIQUETTE#v}"
+          options=()
+          if [ "$PREVERSION" = "true" ]; then
+            options+=(--prerelease)
+            echo "Publication en préversion."
+          fi
           gh release create "$ETIQUETTE" --repo "$GITHUB_REPOSITORY" \
             --title "PSN Amis $version" --notes-file dist/notes.md --verify-tag \
+            "${options[@]}" \
             "dist/PSN-Amis-Setup-$version.exe" dist/SHA256SUMS.txt
