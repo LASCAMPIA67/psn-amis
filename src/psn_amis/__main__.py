@@ -61,7 +61,23 @@ def analyser(arguments: list[str] | None = None) -> argparse.Namespace:
     parametres.add_argument(
         "--verifier", type=float, metavar="SECONDES", help=argparse.SUPPRESS
     )
+    # Utilisé par la désinstallation (niveau 3) : retire le code du coffre de Windows.
+    parametres.add_argument(
+        "--effacer-code", action="store_true", help=argparse.SUPPRESS
+    )
+    parametres.add_argument("--cible", help=argparse.SUPPRESS)
     return parametres.parse_args(arguments)
+
+
+def effacer_code(cible: str | None) -> int:
+    """Retire du Gestionnaire d'identification l'entrée de PSN Amis, et rien d'autre."""
+    from psn_amis import coffre
+
+    cible = cible or coffre.CIBLE
+    if cible != coffre.CIBLE and not cible.startswith("PSN Amis/test"):
+        print("Entrée refusée : seule celle de PSN Amis peut être retirée.")
+        return 2
+    return 0 if coffre.effacer(cible) else 1
 
 
 def mode_console(choix: argparse.Namespace) -> bool:
@@ -73,6 +89,8 @@ def mode_console(choix: argparse.Namespace) -> bool:
 
 def main(arguments: list[str] | None = None) -> int:
     choix = analyser(arguments)
+    if choix.effacer_code:
+        return effacer_code(choix.cible)
     if choix.demo:
         from psn_amis import demo
 

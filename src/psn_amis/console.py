@@ -132,7 +132,7 @@ def main(choix: argparse.Namespace) -> int:
     """Lance le mode console avec les options lues par __main__.py."""
     # Les anciennes données d'abord (sinon des réglages neufs prendraient leur place),
     # puis les réglages : ils disent notamment où ranger le code npsso.
-    rapport = preparer_donnees()
+    rapport = None if getattr(choix, "demo", False) else preparer_donnees()
     _, problemes_reglages = moteur.charger_reglages()
     if choix.configurer:
         return 0 if moteur.assistant_npsso() else 1

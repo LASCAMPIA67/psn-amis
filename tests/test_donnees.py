@@ -215,3 +215,17 @@ def test_chaque_reglage_est_decrit():
 )
 def test_plage_horaire(texte, attendu):
     assert reglages.plage_horaire(texte) == attendu
+
+
+# ─── Retrait du code par la désinstallation ───────────────────────────────────
+
+
+def test_effacer_code_seulement_l_entree_de_psn_amis():
+    from psn_amis import coffre
+    from psn_amis.__main__ import main
+
+    coffre.ecrire("x", "PSN Amis/test-desinstallation")
+    assert main(["--effacer-code", "--cible", "PSN Amis/test-desinstallation"]) == 0
+    assert coffre.lire("PSN Amis/test-desinstallation") is None
+    # Toute autre entrée du coffre est refusée.
+    assert main(["--effacer-code", "--cible", "Microsoft/compte"]) == 2

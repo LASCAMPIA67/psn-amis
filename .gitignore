@@ -32,3 +32,8 @@ __pycache__/
 
 # Réglages personnels de Claude Code
 .claude/settings.local.json
+
+# Compilation de l'application (outils/construire.py) : publiés dans les GitHub Releases
+build/
+dist/
+captures/

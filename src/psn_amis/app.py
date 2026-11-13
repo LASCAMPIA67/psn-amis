@@ -8,7 +8,7 @@ import sys
 import time
 from typing import IO
 
-from PySide6.QtCore import QProcess, QTimer
+from PySide6.QtCore import QLibraryInfo, QLocale, QProcess, QTimer, QTranslator
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -37,6 +37,14 @@ def icone() -> QIcon:
     return QIcon(str(chemin)) if chemin.exists() else QIcon()
 
 
+def traduire(application: QApplication) -> None:
+    """Boutons et fenêtres standard de Qt en français (Oui, Non, Annuler...)."""
+    traducteur = QTranslator(application)
+    dossier = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if traducteur.load(QLocale(QLocale.Language.French), "qtbase", "_", dossier):
+        application.installTranslator(traducteur)
+
+
 def main(choix: argparse.Namespace) -> int:
     systeme.declarer_identite()
     application = QApplication.instance() or QApplication(sys.argv[:1])
@@ -44,6 +52,7 @@ def main(choix: argparse.Namespace) -> int:
     application.setOrganizationName("LASCAMPIA67")
     application.setApplicationDisplayName("PSN Amis")
     application.setWindowIcon(icone())
+    traduire(application)
 
     verrou = prendre_le_verrou(choix.relance)
     if verrou is None:
