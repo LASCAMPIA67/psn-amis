@@ -19,10 +19,27 @@ import moteur
 RACINE = Path(__file__).resolve().parents[1]
 
 
+FICHIERS_DU_PROGRAMME = (
+    "accepter_amis.py",
+    "moteur.py",
+    "tableau_de_bord.py",
+    "reglages.py",
+    "reglages.exemple.toml",
+    "coffre.py",
+    "notifications.py",
+    "mises_a_jour.py",
+)
+
+
 @pytest.fixture
 def copie(tmp_path) -> Path:
-    for nom in ("accepter_amis.py", "moteur.py", "tableau_de_bord.py"):
+    for nom in FICHIERS_DU_PROGRAMME:
         shutil.copy(RACINE / nom, tmp_path / nom)
+    # Jamais le vrai coffre de Windows (il peut contenir un vrai code npsso), ni de
+    # bulles de notification pendant les tests.
+    (tmp_path / "reglages.toml").write_text(
+        "coffre_windows = false\nnotifications = false\n", encoding="utf-8"
+    )
     return tmp_path
 
 

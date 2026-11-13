@@ -134,15 +134,23 @@ def test_contenu_des_cartes(suivi_rempli, sortie_nulle):
 @pytest.mark.parametrize(
     ("largeur", "attendus"),
     [
-        (120, ("Vérifier maintenant", "Code npsso", "Quitter")),
-        (70, ("Vérifier", "Code")),
-        (56, ("vérif.", "quitter")),
+        (120, ("Vérifier maintenant", "Code npsso", "Aide", "Son", "Quitter")),
+        (90, ("Vérifier", "Code", "Aide", "Son")),
+        (76, ("vérif.", "aide", "quitter")),
+        (40, (" P ", " H ", " Q ")),
     ],
 )
 def test_touches_lisibles_en_entier(suivi_rempli, sortie_nulle, largeur, attendus):
     bas = rendre(suivi_rempli.instantane(), largeur, 24, sortie_nulle).splitlines()[-1]
     assert all(mot in bas for mot in attendus)
     assert "…" not in bas
+
+
+def test_message_du_pied_jamais_coupe(suivi_rempli, sortie_nulle):
+    interface = tb.EtatInterface()
+    interface.informer("Vérification demandée…")
+    bas = rendre(suivi_rempli.instantane(), 100, 24, sortie_nulle, interface)
+    assert "Vérification demandée…" in bas.splitlines()[-1]
 
 
 @pytest.mark.parametrize("largeur", [120, 60, 34])
@@ -269,3 +277,179 @@ def test_vers_tableau_masque_et_filtre(secret):
     evenements = suivi.instantane().evenements
     assert len(evenements) == 1
     assert evenements[0].texte == "secret [code masqué]"
+
+
+# ─── Nouveautés de la version 2.5 ─────────────────────────────────────────────
+
+
+def test_retraits_du_jour_et_dernier_ajout(suivi_rempli, sortie_nulle):
+    texte = rendre(suivi_rempli.instantane(), 120, 32, sortie_nulle)
+    assert "1 retrait" in texte
+    assert "Dernier ajout à l'instant" in texte
+
+
+def test_rythme_par_heure(sortie_nulle):
+    assert tb.rythme_par_heure(3, 3600) == "3,0"
+    assert tb.rythme_par_heure(5, 1800) == "10,0"
+    assert tb.rythme_par_heure(3, 300) is None
+    assert tb.rythme_par_heure(0, 7200) is None
+    suivi = moteur.Suivi()
+    suivi._debut = datetime.now() - timedelta(hours=2)
+    for pseudo in ("a", "b", "c"):
+        suivi.ajout(pseudo)
+    assert "1,5 par heure" in rendre(suivi.instantane(), 160, 40, sortie_nulle)
+
+
+def test_histogramme_des_24_heures(sortie_nulle):
+    maintenant = datetime.now()
+    ajouts = [
+        moteur.Ajout(maintenant - timedelta(hours=heures, minutes=1), f"J{heures}")
+        for heures in (0, 0, 0, 5, 22, 30)
+    ]
+    instant = moteur.Suivi(ajouts).instantane()
+    dessin, total = tb.histogramme(instant, maintenant)
+    # 30 heures : trop ancien, pas compté.
+    assert total == 5
+    assert len(dessin.plain) == 24
+    assert dessin.plain[-1] == "█"
+    assert dessin.plain[-6] != "▁"
+    texte = rendre(instant, 160, 40, sortie_nulle)
+    assert "24 h " in texte
+    assert "5 ajouts" in texte
+
+
+def test_demandes_en_attente_pendant_la_pause(sortie_nulle):
+    suivi = moteur.Suivi()
+    suivi.statut(moteur.Statut.PAUSE, "Les demandes attendent · P : reprendre")
+    il_y_a_5_min = datetime.now() - timedelta(minutes=5, seconds=10)
+    suivi.en_attente(
+        [
+            moteur.Attente("Joueur_en_attente", il_y_a_5_min, "en pause"),
+            moteur.Attente("Sans_date", None, "en pause"),
+        ]
+    )
+    texte = rendre(suivi.instantane(), 120, 32, sortie_nulle)
+    assert "Demandes en attente · 2" in texte
+    assert "Joueur_en_attente" in texte
+    assert "il y a 5 min" in texte
+    assert "Derniers ajouts" not in texte
+    # Hors pause, « Derniers ajouts » revient.
+    suivi.statut(moteur.Statut.EN_MARCHE, "En attente de demandes d'amis", 15)
+    assert "Derniers ajouts" in rendre(suivi.instantane(), 120, 32, sortie_nulle)
+
+
+def test_trop_de_demandes_en_attente(sortie_nulle):
+    suivi = moteur.Suivi()
+    suivi.statut(moteur.Statut.PAUSE, "pause")
+    suivi.en_attente([moteur.Attente(f"J{n}", None) for n in range(40)])
+    texte = rendre(suivi.instantane(), 120, 32, sortie_nulle)
+    assert "autre(s)" in texte
+    assert len(texte.splitlines()) <= 32
+
+
+def test_defilement_de_l_activite(sortie_nulle):
+    suivi = moteur.Suivi()
+    for numero in range(30):
+        suivi.evenement(datetime.now(), logging.INFO, "info", f"message n°{numero}")
+    interface, commandes = tb.EtatInterface(), moteur.Commandes()
+    instant = suivi.instantane()
+    assert interface.decalage(instant.evenements) == 0
+    tb.traiter_touche("bas", interface, commandes)
+    tb.traiter_touche("page_bas", interface, commandes)
+    assert interface.decalage() == 6
+    texte = rendre(instant, 120, 32, sortie_nulle, interface)
+    assert "6 plus récent(s) au-dessus" in texte
+    assert "message n°29" not in texte
+    # Un nouveau message ne fait pas bouger ce qu'on est en train de lire.
+    suivi.evenement(datetime.now(), logging.INFO, "info", "message tout neuf")
+    assert interface.decalage(suivi.instantane().evenements) == 7
+    tb.traiter_touche("haut", interface, commandes)
+    assert interface.decalage() == 6
+    tb.traiter_touche("debut", interface, commandes)
+    assert interface.decalage() == 0
+    # Jamais au-delà du plus ancien message.
+    for _ in range(20):
+        tb.traiter_touche("page_bas", interface, commandes)
+    assert interface.decalage() == 30
+
+
+def test_aide_avec_les_7_derniers_jours(dossier, sortie_nulle, suivi_rempli):
+    aujourd_hui = datetime.now()
+    (dossier / "journal.txt").write_text(
+        f"{aujourd_hui:%Y-%m-%d} 00:00:01  Demande acceptée : Un\n"
+        f"{aujourd_hui:%Y-%m-%d} 00:00:02  Ami retiré : Un\n",
+        encoding="utf-8",
+    )
+    interface, commandes = tb.EtatInterface(), moteur.Commandes()
+    tb.traiter_touche("h", interface, commandes)
+    assert interface.aide
+    assert len(interface.statistiques) == 7
+    assert interface.statistiques[0][1:] == (1, 1)
+    for largeur, hauteur in ((160, 50), (80, 40), (40, 20)):
+        texte = rendre(
+            suivi_rempli.instantane(), largeur, hauteur, sortie_nulle, interface
+        )
+        lignes = texte.splitlines()
+        assert "Aide" in texte
+        assert len(lignes) <= hauteur
+        assert all(len(ligne) <= largeur for ligne in lignes)
+    texte = rendre(suivi_rempli.instantane(), 160, 50, sortie_nulle, interface)
+    for mot in ("Touches", "Symboles", "7 derniers jours", "aujourd'hui", "reglages"):
+        assert mot in texte
+    tb.traiter_touche("echap", interface, commandes)
+    assert not interface.aide
+    tb.traiter_touche("H", interface, commandes)
+    tb.traiter_touche("h", interface, commandes)
+    assert not interface.aide
+
+
+def test_pause_minutee(sortie_nulle):
+    interface, commandes = tb.EtatInterface(), moteur.Commandes()
+    tb.traiter_touche("2", interface, commandes)
+    assert commandes.pause.is_set()
+    assert interface.reprise_a is not None
+    assert 590 < interface.reprise_a - time.monotonic() <= 600
+    suivi = moteur.Suivi()
+    suivi.statut(moteur.Statut.PAUSE, "pause")
+    texte = rendre(suivi.instantane(), 120, 32, sortie_nulle, interface)
+    assert "Reprise dans 9 min" in texte or "Reprise dans 10 min" in texte
+    # Pas encore l'heure : rien ne change.
+    tb.reprendre_si_l_heure_est_venue(interface, commandes)
+    assert commandes.pause.is_set()
+    interface.reprise_a = time.monotonic() - 1
+    tb.reprendre_si_l_heure_est_venue(interface, commandes)
+    assert not commandes.pause.is_set()
+    assert interface.reprise_a is None
+    # La touche P annule la reprise prévue.
+    tb.traiter_touche("1", interface, commandes)
+    tb.traiter_touche("p", interface, commandes)
+    assert interface.reprise_a is None
+    assert not commandes.pause.is_set()
+
+
+def test_touche_s_et_bip(isolement, sortie_nulle, suivi_rempli):
+    interface = tb.EtatInterface()
+    tb.traiter_touche("s", interface, moteur.Commandes())
+    assert interface.son
+    assert isolement.bips == 1
+    assert "activé" in (interface.message_actuel() or "")
+    texte = rendre(suivi_rempli.instantane(), 120, 32, sortie_nulle, interface)
+    assert "♪" in texte
+    tb.traiter_touche("S", interface, moteur.Commandes())
+    assert not interface.son
+    assert isolement.bips == 1
+
+
+@pytest.mark.parametrize("nom", list(tb.THEMES))
+def test_themes_complets(nom, suivi_rempli, sortie_nulle):
+    # Chaque thème définit exactement les mêmes couleurs que le thème sombre.
+    assert set(tb.THEMES[nom].styles) == set(tb.THEME.styles)
+    console = Console(
+        width=120,
+        height=32,
+        force_terminal=True,
+        theme=tb.THEMES[nom],
+        file=sortie_nulle,
+    )
+    ecran = tb.construire_ecran(suivi_rempli.instantane(), tb.EtatInterface(), 120, 32)
+    console.print(ecran)

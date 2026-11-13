@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import coffre
 import moteur
 from tests.conftest import FAUX_CODE
 
@@ -40,9 +41,15 @@ def test_format_refuse_sans_devoiler_le_contenu(dossier, secret, contenu):
     assert FAUX_CODE not in str(erreur.value)
 
 
-def test_fichier_absent(dossier, secret):
+def test_fichier_absent(dossier, secret, sans_coffre):
     with pytest.raises(moteur.ProblemeNpsso, match="introuvable"):
         moteur.lire_npsso()
+
+
+def test_aucun_code_nulle_part(dossier, secret):
+    with pytest.raises(moteur.ProblemeNpsso, match="aucun code"):
+        moteur.lire_npsso()
+    assert not moteur.code_present()
 
 
 def test_masquage_prefere_le_code_le_plus_long(monkeypatch):
@@ -58,7 +65,7 @@ def test_masquage_dans_le_statut_affiche(secret):
     assert "[code masqué]" in suivi.instantane().detail
 
 
-def test_enregistrer_un_code_colle(dossier, secret, monkeypatch):
+def test_enregistrer_un_code_colle(dossier, secret, sans_coffre, monkeypatch):
     monkeypatch.setattr(moteur, "proteger_fichier", lambda chemin: True)
     moteur.enregistrer_npsso(f'  "{FAUX_CODE}"  ')
     assert moteur.FICHIER_NPSSO.read_text(encoding="utf-8").strip() == FAUX_CODE
@@ -94,3 +101,39 @@ def test_assistant_abandonne_sur_ctrl_c(dossier, secret, monkeypatch):
 
     monkeypatch.setattr(getpass, "getpass", interrompre)
     assert moteur.assistant_npsso(dire=lambda texte: None) is False
+
+
+# ─── Coffre de Windows ────────────────────────────────────────────────────────
+
+
+def test_code_colle_range_dans_le_coffre(dossier, secret):
+    moteur.FICHIER_NPSSO.write_text("ancien", encoding="utf-8")
+    assert moteur.enregistrer_npsso(FAUX_CODE) == "le coffre de Windows"
+    assert coffre.lire() == FAUX_CODE
+    # L'ancien fichier passerait avant le coffre : il est supprimé.
+    assert not moteur.FICHIER_NPSSO.exists()
+    assert moteur.code_present()
+    assert moteur.lire_npsso() == FAUX_CODE
+
+
+def test_npsso_txt_passe_dans_le_coffre(dossier, secret):
+    coffre.ecrire("ancien code du coffre")
+    moteur.FICHIER_NPSSO.write_text(FAUX_CODE, encoding="utf-8")
+    # Le fichier, plus récent, gagne ; il est rangé dans le coffre puis supprimé.
+    assert moteur.lire_npsso() == FAUX_CODE
+    assert coffre.lire() == FAUX_CODE
+    assert not moteur.FICHIER_NPSSO.exists()
+
+
+def test_npsso_txt_garde_si_le_coffre_echoue(dossier, secret, monkeypatch):
+    monkeypatch.setattr(coffre, "ecrire", lambda code, cible=coffre.CIBLE: False)
+    moteur.FICHIER_NPSSO.write_text(FAUX_CODE, encoding="utf-8")
+    assert moteur.lire_npsso() == FAUX_CODE
+    assert moteur.FICHIER_NPSSO.exists()
+
+
+def test_coffre_coupe_dans_les_reglages(dossier, secret, sans_coffre, monkeypatch):
+    monkeypatch.setattr(moteur, "proteger_fichier", lambda chemin: True)
+    assert moteur.enregistrer_npsso(FAUX_CODE) == "npsso.txt"
+    assert coffre.lire() is None
+    assert moteur.FICHIER_NPSSO.exists()

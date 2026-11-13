@@ -15,7 +15,10 @@ from dataclasses import dataclass, field
 import pytest
 import requests
 
+import coffre
 import moteur
+import notifications
+import reglages
 import tableau_de_bord
 
 # Un code au bon format, inventé pour les tests.
@@ -38,6 +41,56 @@ def journal_configure() -> None:
     moteur.configurer_journal(ecran=False, fichier=False)
 
 
+@dataclass
+class Alertes:
+    """Bulles et bips demandés pendant un test (aucun n'est vraiment affiché)."""
+
+    bulles: list[tuple[str, str]] = field(default_factory=list)
+    bips: int = 0
+
+
+@pytest.fixture(autouse=True)
+def isolement(monkeypatch) -> Alertes:
+    """Pour tous les tests : réglages par défaut, coffre de Windows remplacé par un
+    coffre en mémoire, bulles et bips seulement notés."""
+    monkeypatch.setattr(moteur, "REGLAGES", reglages.Reglages())
+    faux_coffre: dict[str, str] = {}
+    monkeypatch.setattr(coffre, "disponible", lambda: True)
+    monkeypatch.setattr(
+        coffre, "lire", lambda cible=coffre.CIBLE: faux_coffre.get(cible)
+    )
+
+    def ecrire(code: str, cible: str = coffre.CIBLE) -> bool:
+        faux_coffre[cible] = code
+        return True
+
+    def effacer(cible: str = coffre.CIBLE) -> bool:
+        faux_coffre.pop(cible, None)
+        return True
+
+    monkeypatch.setattr(coffre, "ecrire", ecrire)
+    monkeypatch.setattr(coffre, "effacer", effacer)
+    alertes = Alertes()
+
+    def notifier(titre: str, texte: str) -> bool:
+        alertes.bulles.append((titre, texte))
+        return True
+
+    def bip() -> bool:
+        alertes.bips += 1
+        return True
+
+    monkeypatch.setattr(notifications, "notifier", notifier)
+    monkeypatch.setattr(notifications, "bip", bip)
+    return alertes
+
+
+@pytest.fixture
+def sans_coffre(monkeypatch) -> None:
+    """Le code npsso est gardé dans npsso.txt, comme sans le coffre de Windows."""
+    monkeypatch.setattr(moteur, "REGLAGES", reglages.Reglages(coffre_windows=False))
+
+
 @pytest.fixture
 def dossier(tmp_path, monkeypatch):
     """Fichiers du moteur redirigés vers un dossier temporaire."""
@@ -45,6 +98,9 @@ def dossier(tmp_path, monkeypatch):
     monkeypatch.setattr(moteur, "FICHIER_NPSSO", tmp_path / "npsso.txt")
     monkeypatch.setattr(moteur, "FICHIER_JOURNAL", tmp_path / "journal.txt")
     monkeypatch.setattr(moteur, "FICHIER_VERROU", tmp_path / "accepter_amis.lock")
+    monkeypatch.setattr(moteur, "FICHIER_AMIS", tmp_path / "amis.json")
+    monkeypatch.setattr(moteur, "FICHIER_REGLAGES", tmp_path / "reglages.toml")
+    monkeypatch.setattr(moteur, "FICHIER_DIAGNOSTIC", tmp_path / "diagnostic.txt")
     return tmp_path
 
 
@@ -64,6 +120,7 @@ class FauxSony:
     acceptes: list[str] = field(default_factory=list)
     ids: set[str] = field(default_factory=lambda: {f"ami{n}" for n in range(10)})
     total_force: int | None = None
+    depuis: dict = field(default_factory=dict)
     refuser: bool = False
     coupure: bool = False
 
@@ -71,7 +128,7 @@ class FauxSony:
         if self.coupure:
             raise requests.ConnectionError("coupure simulée")
         amis = [d for d in self.demandes if d not in self.acceptes]
-        return moteur.Demandes(amis, list(self.partages))
+        return moteur.Demandes(amis, list(self.partages), dict(self.depuis))
 
     def liste_amis(self, connexion) -> tuple[set[str], int]:
         ids = set(self.ids)
