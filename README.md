@@ -10,7 +10,7 @@
 
 ![La fenêtre de PSN Amis : statut, compte connecté, nombre d'amis et capacité de la liste, demandes en attente, demandes acceptées, amis supprimés, synchronisation et derniers ajouts](docs/images/fenetre-tableau-de-bord.png)
 
-**[⬇ Télécharger PSN Amis 3.0.0](https://github.com/LASCAMPIA67/psn-amis/releases/tag/v3.0.0)** (fichier `PSN-Amis-Setup-3.0.0.exe`, Windows 10 et 11, 64 bits). C'est une **préversion** : les dernières vérifications manuelles sont encore en cours.
+**[⬇ Télécharger la dernière version](https://github.com/LASCAMPIA67/psn-amis/releases/latest)** (fichier `PSN-Amis-Setup-x.y.z.exe`, Windows 10 et 11, 64 bits)
 
 > PSN Amis est un projet indépendant, **sans lien avec Sony Interactive Entertainment ni PlayStation**. Il utilise une API PlayStation non officielle : lis [Limites et avertissement](#limites-et-avertissement) avant de l'utiliser.
 
@@ -43,7 +43,7 @@
 
 ## Installation
 
-1. Télécharge **`PSN-Amis-Setup-x.y.z.exe`** depuis la [page des versions](https://github.com/LASCAMPIA67/psn-amis/releases).
+1. Télécharge **`PSN-Amis-Setup-x.y.z.exe`** depuis la [page des versions](https://github.com/LASCAMPIA67/psn-amis/releases/latest).
 2. Double-clique dessus. Windows peut afficher « Windows a protégé votre ordinateur » (SmartScreen) : l'installateur n'est pas encore signé par un certificat payant. Vérifie que le fichier vient bien de cette page GitHub, puis clique sur **Informations complémentaires › Exécuter quand même**. Ne désactive jamais SmartScreen ni ton antivirus.
 3. Suis l'assistant : choisis le dossier (par défaut `%LOCALAPPDATA%\Programs\PSN Amis`), et coche si tu veux un raccourci sur le Bureau.
 4. À la fin, laisse coché **Lancer PSN Amis**.
