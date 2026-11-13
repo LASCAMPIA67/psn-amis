@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from psnawp_api.core import PSNAWPBadRequestError
 
-import moteur
+from psn_amis import moteur
 from tests.conftest import attendre_que
 
 # ─── Tri des demandes reçues ──────────────────────────────────────────────────

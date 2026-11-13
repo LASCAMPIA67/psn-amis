@@ -20,9 +20,9 @@ from datetime import date, datetime
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(RACINE))
+sys.path.insert(0, str(RACINE / "src"))
 
-import moteur  # noqa: E402
+from psn_amis import moteur  # noqa: E402
 
 
 def lignes_du_journal(depuis: datetime) -> list[tuple[datetime, str, str]]:

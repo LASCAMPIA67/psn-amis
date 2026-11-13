@@ -22,10 +22,10 @@ from pathlib import Path
 from rich.console import Console
 
 RACINE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(RACINE))
+sys.path.insert(0, str(RACINE / "src"))
 
-import moteur  # noqa: E402
-import tableau_de_bord as tb  # noqa: E402
+from psn_amis import moteur  # noqa: E402
+from psn_amis import tableau_de_bord as tb  # noqa: E402
 
 MAINTENANT = datetime(2026, 11, 11, 21, 4, 33)
 COMPTE = "MonCompte-PSN"

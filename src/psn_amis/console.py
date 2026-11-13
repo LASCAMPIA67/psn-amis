@@ -1,20 +1,17 @@
-"""PSN Amis : accepte automatiquement les demandes d'amis PlayStation Network.
+"""Mode console de PSN Amis : le tableau de bord en couleur des versions 2.x.
 
-Le plus simple : double-cliquez sur « Lancer PSN Amis.cmd ».
+L'application s'ouvre normalement dans sa fenêtre (voir app.py). Le mode console reste
+disponible pour qui le préfère, depuis le code source :
 
-En ligne de commande, depuis ce dossier :
-    .venv\\Scripts\\python.exe accepter_amis.py               tableau de bord en couleur
-    .venv\\Scripts\\python.exe accepter_amis.py --test        demandes en attente, sans
-                                                              rien accepter
-    .venv\\Scripts\\python.exe accepter_amis.py --simple      affichage texte simple
-    .venv\\Scripts\\python.exe accepter_amis.py --configurer  enregistrer le code npsso
-                                                              (connecter son compte)
+    uv run python -m psn_amis --console               tableau de bord en couleur
+    uv run python -m psn_amis --test                  demandes en attente, sans rien
+                                                      accepter
+    uv run python -m psn_amis --simple                affichage texte simple
+    uv run python -m psn_amis --configurer            enregistrer le code npsso
     Ajoutez --diagnostic pour écrire aussi diagnostic.txt (détails techniques, code
     npsso toujours masqué), à joindre à un signalement de problème.
 
-Au premier lancement, sans code enregistré, l'assistant demande le code avant d'ouvrir
-le tableau de bord. Les réglages (intervalle de vérification, thème, notifications...)
-sont dans reglages.toml, créé au premier lancement.
+Dans l'application installée, le même mode est fourni par « PSN Amis console.exe ».
 """
 
 from __future__ import annotations
@@ -28,8 +25,8 @@ import threading
 from collections.abc import Callable
 from typing import IO
 
-import moteur
-from moteur import Commandes, Suivi, journal
+from psn_amis import chemins, migration, moteur
+from psn_amis.moteur import Commandes, Suivi, journal
 
 # Gardé en mémoire : Windows l'appelle quand la fenêtre se ferme.
 _gestionnaire_fermeture: object | None = None
@@ -63,6 +60,30 @@ class Fin:
         self._verrou.close()
         moteur.FICHIER_VERROU.unlink(missing_ok=True)
         moteur.nettoyer_fichiers_temporaires()
+
+
+def preparer_donnees() -> migration.Rapport | None:
+    """Reprend, une seule fois, les données d'une version 2.x lancée depuis le code."""
+    return migration.migrer_si_besoin(chemins.dossier_projet(), moteur.DOSSIER)
+
+
+def signaler_migration(rapport: migration.Rapport | None) -> None:
+    if rapport is None or not rapport.utile:
+        return
+    if rapport.copies:
+        journal.info(
+            "Données de l'ancienne version reprises dans %s : %s.",
+            moteur.DOSSIER,
+            ", ".join(rapport.copies),
+        )
+    for erreur in rapport.erreurs:
+        journal.warning("Reprise des anciennes données : %s", erreur)
+    if rapport.ancien_npsso:
+        journal.warning(
+            "Un ancien fichier npsso.txt reste dans %s : une fois PSN Amis connecté, "
+            "supprimez-le (le code est désormais gardé dans le coffre de Windows).",
+            rapport.source,
+        )
 
 
 def surveiller_fermeture_fenetre(fin: Callable[[str], None]) -> None:
@@ -107,35 +128,11 @@ def console_interactive() -> bool:
     return all(flux is not None and flux.isatty() for flux in (sys.stdin, sys.stdout))
 
 
-def main() -> int:
-    parametres = argparse.ArgumentParser(
-        prog="accepter_amis",
-        description="Accepte automatiquement les demandes d'amis PSN.",
-    )
-    mode = parametres.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--test",
-        action="store_true",
-        help="affiche les demandes en attente sans les accepter",
-    )
-    mode.add_argument(
-        "--simple",
-        action="store_true",
-        help="affichage texte simple, sans tableau de bord",
-    )
-    mode.add_argument(
-        "--configurer",
-        action="store_true",
-        help="enregistre le code npsso (connecte votre compte), puis s'arrête",
-    )
-    parametres.add_argument(
-        "--diagnostic",
-        action="store_true",
-        help="écrit aussi diagnostic.txt, avec les détails techniques (code masqué)",
-    )
-    choix = parametres.parse_args()
-
-    # Les réglages d'abord : ils disent notamment où ranger le code npsso.
+def main(choix: argparse.Namespace) -> int:
+    """Lance le mode console avec les options lues par __main__.py."""
+    # Les anciennes données d'abord (sinon des réglages neufs prendraient leur place),
+    # puis les réglages : ils disent notamment où ranger le code npsso.
+    rapport = preparer_donnees()
     _, problemes_reglages = moteur.charger_reglages()
     if choix.configurer:
         return 0 if moteur.assistant_npsso() else 1
@@ -144,7 +141,7 @@ def main() -> int:
     if not choix.test and not choix.simple and console_interactive():
         try:
             # Rich n'est chargé que pour le tableau de bord.
-            import tableau_de_bord
+            from psn_amis import tableau_de_bord
         except ImportError:
             tableau_de_bord = None
         # Premier lancement : on demande le code avant d'ouvrir le tableau de bord.
@@ -185,6 +182,7 @@ def main() -> int:
     journal.info("=== Démarrage de PSN Amis ===")
     for probleme in problemes_reglages:
         journal.warning("%s", probleme)
+    signaler_migration(rapport)
     if choix.diagnostic:
         journal.info(
             "Mode diagnostic : détails techniques écrits dans %s.",

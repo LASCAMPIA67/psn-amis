@@ -7,6 +7,13 @@ remplacé par un faux serveur en mémoire.
 
 from __future__ import annotations
 
+import os
+import tempfile
+
+# Avant tout import de psn_amis : jamais le vrai dossier des données
+# (%LOCALAPPDATA%\PSN Amis), même par erreur.
+os.environ["PSN_AMIS_DONNEES"] = tempfile.mkdtemp(prefix="psn-amis-tests-")
+
 import threading
 import time
 from collections.abc import Callable
@@ -15,11 +22,7 @@ from dataclasses import dataclass, field
 import pytest
 import requests
 
-import coffre
-import moteur
-import notifications
-import reglages
-import tableau_de_bord
+from psn_amis import coffre, moteur, notifications, reglages, tableau_de_bord
 
 # Un code au bon format, inventé pour les tests.
 FAUX_CODE = ("Ab3" * 22)[:64]
@@ -97,7 +100,7 @@ def dossier(tmp_path, monkeypatch):
     monkeypatch.setattr(moteur, "DOSSIER", tmp_path)
     monkeypatch.setattr(moteur, "FICHIER_NPSSO", tmp_path / "npsso.txt")
     monkeypatch.setattr(moteur, "FICHIER_JOURNAL", tmp_path / "journal.txt")
-    monkeypatch.setattr(moteur, "FICHIER_VERROU", tmp_path / "accepter_amis.lock")
+    monkeypatch.setattr(moteur, "FICHIER_VERROU", tmp_path / "psn-amis.lock")
     monkeypatch.setattr(moteur, "FICHIER_AMIS", tmp_path / "amis.json")
     monkeypatch.setattr(moteur, "FICHIER_REGLAGES", tmp_path / "reglages.toml")
     monkeypatch.setattr(moteur, "FICHIER_DIAGNOSTIC", tmp_path / "diagnostic.txt")

@@ -35,9 +35,8 @@ from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
 
-import moteur
-import notifications
-from moteur import Commandes, Evenement, Instantane, Statut, Suivi, journal
+from psn_amis import moteur, notifications
+from psn_amis.moteur import Commandes, Evenement, Instantane, Statut, Suivi, journal
 
 # ─── Apparence ────────────────────────────────────────────────────────────────
 # Trois jeux de couleurs, choisis dans reglages.toml (réglage « theme »).

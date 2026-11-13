@@ -10,9 +10,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-import moteur
-import reglages
-import tableau_de_bord
+from psn_amis import moteur, reglages, tableau_de_bord
 from tests.conftest import attendre_que
 
 
