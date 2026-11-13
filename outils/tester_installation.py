@@ -103,10 +103,20 @@ def desinstaller(dossier: Path, journal: Path, *parametres: str) -> None:
         timeout=300,
     )
     # Le programme de désinstallation se relance depuis le dossier temporaire :
-    # on attend que l'entrée de Windows disparaisse.
+    # on attend que l'entrée de Windows disparaisse, puis la toute fin (journal
+    # fermé), car les données ne sont effacées qu'après le programme.
     fin = time.monotonic() + 120
-    while time.monotonic() < fin and (entree_registre() or programme.exists()):
+    while time.monotonic() < fin and (
+        entree_registre() or programme.exists() or not journal_ferme(journal)
+    ):
         time.sleep(0.5)
+
+
+def journal_ferme(journal: Path) -> bool:
+    try:
+        return "Log closed." in journal.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
 
 
 def donnees_de_test(dossier: Path) -> None:
