@@ -441,6 +441,12 @@ QTableView, QListWidget, QTreeWidget { background: %(surface)s;
     selection-background-color: %(selection)s; selection-color: %(texte)s; }
 QTableView::item, QListWidget::item { padding: 5px 6px; border: none; }
 QListWidget::item:hover { background: %(surface_haute)s; }
+QListWidget::item:selected, QTableView::item:selected {
+    background: %(selection)s; color: %(texte)s; }
+QListWidget:focus, QTableView:focus { border: 1px solid %(accent)s; }
+QListWidget::item:selected:focus { border-left: 3px solid %(accent)s; }
+QTabBar QToolButton { background: %(surface_haute)s; border: 1px solid %(bordure_forte)s;
+    border-radius: 6px; padding: 2px; margin: 2px; }
 QHeaderView { background: transparent; }
 QHeaderView::section { background: %(surface)s; color: %(discret)s; border: none;
     border-bottom: 1px solid %(bordure_forte)s; padding: 8px 6px; font-weight: 700; }

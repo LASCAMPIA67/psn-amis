@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLineEdit,
-    QPlainTextEdit,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -85,9 +85,13 @@ class Console(QWidget):
         for b in (copier, effacer, exporter):
             outils.addWidget(b)
 
-        self.texte = QPlainTextEdit()
+        # Texte enrichi : retraits suspendus (les lignes longues restent alignées
+        # après l'heure) ; mémoire bornée par le nombre de paragraphes.
+        self.texte = QTextEdit()
         self.texte.setReadOnly(True)
-        self.texte.setMaximumBlockCount(MAXIMUM)
+        self.texte.setAcceptRichText(True)
+        self.texte.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.texte.document().setMaximumBlockCount(MAXIMUM)
         self.texte.setAccessibleName("Activité du moteur")
         self.texte.setUndoRedoEnabled(False)
         police = self.texte.font()
@@ -111,7 +115,7 @@ class Console(QWidget):
         barre = self.texte.verticalScrollBar()
         en_bas = barre.value() >= barre.maximum() - 4
         position = barre.value()
-        self.texte.appendHtml(self._ligne(message))
+        self.texte.append(self._ligne(message))
         if en_bas:
             barre.setValue(barre.maximum())
         else:
@@ -134,25 +138,33 @@ class Console(QWidget):
         cherche = self.recherche.text().strip().casefold()
         return not cherche or cherche in message.texte.casefold()
 
+    def _retrait(self) -> int:
+        """Largeur de « HH:MM:SS ✖ » : les lignes suivantes s'alignent après."""
+        return self.texte.fontMetrics().horizontalAdvance("00:00:00 ✖ ") + 2
+
     def _ligne(self, message: Message) -> str:
         symbole, cle = apparence(message)
         couleur = getattr(self._palette, cle, self._palette.texte)
         heure = message.moment.strftime("%H:%M:%S")
-        texte = html.escape(message.texte).replace("\n", "<br>&nbsp;&nbsp;")
+        texte = html.escape(message.texte).replace("\n", "<br>")
+        graisse = "font-weight:600;" if message.niveau >= logging.ERROR else ""
+        retrait = self._retrait()
         ligne = (
-            f'<span style="color:{self._palette.discret}">{heure}</span> '
-            f'<span style="color:{couleur}"><b>{symbole}</b> {texte}</span>'
+            f'<p style="margin:0 0 4px {retrait}px; text-indent:-{retrait}px; '
+            f'line-height:125%;">'
+            f'<span style="color:{self._palette.tertiaire}">{heure}</span> '
+            f'<span style="color:{couleur};{graisse}"><b>{symbole}</b> {texte}</span>'
         )
         if message.detail and self.details.isChecked():
             detail = html.escape(message.detail).replace("\n", "<br>")
             ligne += f'<br><span style="color:{self._palette.discret}">{detail}</span>'
-        return ligne
+        return ligne + "</p>"
 
     def reafficher(self) -> None:
         self.texte.clear()
         lignes = [self._ligne(m) for m in self.messages_affiches()]
         if lignes:
-            self.texte.appendHtml("<br>".join(lignes))
+            self.texte.setHtml("".join(lignes))
         self.texte.moveCursor(QTextCursor.MoveOperation.End)
 
     def effacer_affichage(self) -> None:

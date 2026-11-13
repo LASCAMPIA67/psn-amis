@@ -117,6 +117,8 @@ APPARENCE: dict[Statut, tuple[str, str, str]] = {
     Statut.CODE_NPSSO: ("▲", "CODE NPSSO À CHANGER", "erreur"),
     Statut.LISTE_PLEINE: ("■", "LISTE D'AMIS PLEINE", "erreur"),
     Statut.ERREUR: ("▲", "ERREUR", "erreur"),
+    Statut.CONNEXION_REQUISE: ("◌", "CONNEXION PSN NÉCESSAIRE", "alerte"),
+    Statut.SUPPRESSION: ("●", "GESTION DES AMIS", "info"),
 }
 STATUTS_ANIMES = (Statut.DEMARRAGE, Statut.CONNEXION, Statut.VERIFICATION)
 

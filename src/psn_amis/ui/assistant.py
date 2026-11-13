@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QVBoxLayout,
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from psn_amis import moteur, reglages
 from psn_amis.reglages import Reglages
-from psn_amis.ui import composants
+from psn_amis.ui import composants, icones
 from psn_amis.ui import theme as theme_ui
 from psn_amis.ui.apropos import AVERTISSEMENT
 from psn_amis.ui.commun import Tache, etiquette
@@ -131,11 +132,34 @@ class FenetreCode(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Connecter un compte PSN")
-        self.resize(620, 300)
+        self.resize(660, 360)
         self.saisie = SaisieCode()
         disposition = QVBoxLayout(self)
+        disposition.setContentsMargins(24, 22, 24, 18)
+        disposition.setSpacing(12)
+        entete = QHBoxLayout()
+        entete.setSpacing(12)
+        icone = QLabel()
+        p = composants.palette_courante()
+        icone.setPixmap(icones.pixmap("cle", p.accent, 28))
+        icone.setAlignment(Qt.AlignmentFlag.AlignTop)
+        textes = QVBoxLayout()
+        textes.setSpacing(2)
+        textes.addWidget(etiquette("Connecter votre compte PlayStation", "titre_vide"))
+        textes.addWidget(
+            etiquette(
+                "Le code est vérifié auprès de Sony, puis gardé dans le Gestionnaire "
+                "d'identification de Windows. Il n'est jamais affiché.",
+                "discret",
+                retour_ligne=True,
+            )
+        )
+        entete.addWidget(icone)
+        entete.addLayout(textes, 1)
+        disposition.addLayout(entete)
         disposition.addWidget(self.saisie)
         boutons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        boutons.button(QDialogButtonBox.StandardButton.Close).setText("Fermer")
         boutons.rejected.connect(self.reject)
         disposition.addWidget(boutons)
 
@@ -180,7 +204,10 @@ class Assistant(QWizard):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Bienvenue dans PSN Amis")
-        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
+        # Style classique : pas de flèche de retour dans l'en-tête (elle chevauchait
+        # le titre sous Windows) ; « < Précédent » reste en bas.
+        self.setWizardStyle(QWizard.WizardStyle.ClassicStyle)
+        self.setOption(QWizard.WizardOption.NoBackButtonOnStartPage, True)
         self.resize(680, 520)
         self.setButtonText(QWizard.WizardButton.NextButton, "Suivant >")
         self.setButtonText(QWizard.WizardButton.BackButton, "< Précédent")

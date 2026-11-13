@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMenu,
-    QMessageBox,
     QPushButton,
     QSystemTrayIcon,
     QToolButton,
@@ -71,6 +70,15 @@ PAGES = (
     ),
     ("À propos", "Ctrl+6", "apropos", "Version, mises à jour et confidentialité"),
 )
+# Rangée supérieure d'un clavier AZERTY, sans Maj : &, é, ", ', (, -.
+AZERTY = (
+    Qt.Key.Key_Ampersand,
+    Qt.Key.Key_Eacute,
+    Qt.Key.Key_QuoteDbl,
+    Qt.Key.Key_Apostrophe,
+    Qt.Key.Key_ParenLeft,
+    Qt.Key.Key_Minus,
+)
 # Icône de chaque commande (recolorée selon le thème).
 ICONES_ACTIONS = {
     "action_demarrer": "jouer",
@@ -112,8 +120,9 @@ class Fenetre(QMainWindow):
 
         self.tableau = TableauDeBord(palette)
         self.console = Console(palette)
-        self.amis = PageAmis(controleur.gestion, controleur.verifier_maintenant)
-        self.demandes = PageDemandes(self._changer_reglage, lambda: self.aller(4))
+        self.amis = PageAmis(controleur.gestion, self.verifier_maintenant)
+        self.amis.notifier = self.notifier
+        self.demandes = PageDemandes(self._changer_reglage, self.ouvrir_listes)
         verrous = {}
         if not systeme.demarrage_possible():
             verrous["demarrage_windows"] = (
@@ -181,9 +190,16 @@ class Fenetre(QMainWindow):
         ):
             conteneur = QWidget()
             conteneur.setObjectName("page")
-            disposition = QVBoxLayout(conteneur)
+            disposition = QHBoxLayout(conteneur)
             disposition.setContentsMargins(28, 18, 28, 22)
-            disposition.addWidget(page)
+            if page not in (self.console, self.amis):
+                # Contenu centré, limité en largeur : pas de vides disproportionnés.
+                page.setMaximumWidth(self.LARGEUR_CONTENU)
+                disposition.addStretch(1)
+                disposition.addWidget(page, 1000)
+                disposition.addStretch(1)
+            else:
+                disposition.addWidget(page)
             self.pages.addWidget(conteneur)
         nav.addStretch(1)
         pied = QFrame()
@@ -298,7 +314,7 @@ class Fenetre(QMainWindow):
             "Vérifier maintenant",
             "F5",
             "Vérifie les demandes et recompte les amis tout de suite",
-            self.controleur.verifier_maintenant,
+            self.verifier_maintenant,
         )
         self.action_reconnecter = self._action(
             "Reconnecter",
@@ -334,6 +350,8 @@ class Fenetre(QMainWindow):
             bouton.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             bouton.setIconSize(QSize(16, 16))
             bouton.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Nom lu par les lecteurs d'écran, même quand seule l'icône est visible.
+            bouton.setAccessibleName(getattr(self, nom).text())
             self._boutons_actions[nom] = bouton
             self.barre_actions.addWidget(bouton)
         self.menu_plus = QMenu(self)
@@ -353,7 +371,14 @@ class Fenetre(QMainWindow):
         self.bouton_plus.setCursor(Qt.CursorShape.PointingHandCursor)
         self.barre_actions.addWidget(self.bouton_plus)
         for rang, (nom, raccourci, _, _) in enumerate(PAGES):
-            self._action(nom, raccourci, nom, lambda r=rang: self.aller(r))
+            # « _ » reçoit le booléen « checked » de triggered : sans lui, il
+            # écrasait le rang et tous les raccourcis menaient au Tableau de bord.
+            action = self._action(
+                nom, raccourci, nom, lambda _=False, r=rang: self.aller(r)
+            )
+            action.setShortcuts(
+                [QKeySequence(raccourci), QKeySequence(Qt.Modifier.CTRL | AZERTY[rang])]
+            )
 
     def aller(self, rang: int) -> None:
         self._boutons_nav[rang].setChecked(True)
@@ -370,19 +395,27 @@ class Fenetre(QMainWindow):
         if self.isVisible():
             self.notifications.afficher(niveau, titre, texte, duree_ms)
 
+    # Largeur maximale du contenu des pages de lecture (très grands écrans).
+    LARGEUR_CONTENU = 1500
     # En dessous de cette largeur, les commandes de l'en-tête n'affichent que leur
     # icône (le libellé reste dans l'infobulle et pour les lecteurs d'écran).
     LARGEUR_COMPACTE = 1180
+    LARGEUR_TRES_COMPACTE = 980
 
     def resizeEvent(self, evenement) -> None:
         super().resizeEvent(evenement)
         self.notifications.replacer()
-        style = (
-            Qt.ToolButtonStyle.ToolButtonIconOnly
-            if self.width() < self.LARGEUR_COMPACTE
-            else Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-        )
-        for bouton in self._boutons_actions.values():
+        largeur = self.width()
+        for nom, bouton in self._boutons_actions.items():
+            # Réduction progressive : d'abord le libellé le plus long, puis tous.
+            icone_seule = largeur < self.LARGEUR_TRES_COMPACTE or (
+                largeur < self.LARGEUR_COMPACTE and nom == "action_verifier"
+            )
+            style = (
+                Qt.ToolButtonStyle.ToolButtonIconOnly
+                if icone_seule
+                else Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+            )
             if bouton.toolButtonStyle() != style:
                 bouton.setToolButtonStyle(style)
 
@@ -390,16 +423,42 @@ class Fenetre(QMainWindow):
         self.controleur.basculer_pause()
         self.actualiser()
 
-    def arreter_moteur(self) -> None:
-        if self.controleur.gestion.vue().operation is not None:
-            reponse = QMessageBox.question(
-                self,
-                "Arrêter le moteur",
-                "Une suppression d'amis est en cours. Le moteur s'arrêtera après l'ami "
-                "en cours de traitement. Continuer ?",
+    def verifier_maintenant(self) -> None:
+        """Demande une vérification tout de suite, avec un retour visible."""
+        if self.controleur.etat() is not EtatMoteur.EN_MARCHE:
+            self.notifier(
+                "attention",
+                "Moteur arrêté",
+                "Démarrez le moteur pour vérifier les demandes.",
+                3000,
             )
-            if reponse != QMessageBox.StandardButton.Yes:
-                return
+            return
+        self.controleur.verifier_maintenant()
+        self.notifier(
+            "info",
+            "Vérification lancée",
+            "Demandes reçues et liste d'amis vérifiées maintenant.",
+            2200,
+        )
+
+    def ouvrir_listes(self) -> None:
+        """« Listes noire et blanche » : Paramètres, onglet Demandes."""
+        self.aller(4)
+        self.reglages_page.ouvrir_onglet("Demandes")
+
+    def arreter_moteur(self) -> None:
+        if (
+            self.controleur.gestion.vue().operation is not None
+            and not composants.confirmer(
+                self,
+                "Arrêter le moteur ?",
+                "Une suppression d'amis est en cours. Le moteur s'arrêtera après l'ami en "
+                "cours de traitement ; les suivants ne seront pas supprimés.",
+                "Arrêter le moteur",
+                danger=True,
+            )
+        ):
+            return
         self.controleur.arreter()
 
     def changer_code(self) -> None:
@@ -433,8 +492,10 @@ class Fenetre(QMainWindow):
             return
         source = Path(dossier)
         if not migration.anciennes_donnees(source):
-            QMessageBox.information(
-                self, "PSN Amis", "Aucune donnée de PSN Amis dans ce dossier."
+            composants.informer(
+                self,
+                "Aucune donnée trouvée",
+                "Ce dossier ne contient aucune donnée d'une ancienne version de PSN Amis.",
             )
             return
         rapport = migration.migrer(source, moteur.DOSSIER)
@@ -452,7 +513,12 @@ class Fenetre(QMainWindow):
             )
         if rapport.copies:
             texte += "\n\nRedémarrez PSN Amis pour utiliser ces données."
-        QMessageBox.information(self, "Reprise des anciennes données", texte)
+        composants.informer(
+            self,
+            "Reprise des anciennes données",
+            texte,
+            "erreur" if rapport.erreurs else "succes",
+        )
 
     def redemarrer_application(self) -> None:
         self._relancer_application()
@@ -470,17 +536,18 @@ class Fenetre(QMainWindow):
             self.controleur.reglages, **{nom: valeur}
         )
         if problemes:
-            QMessageBox.warning(self, "PSN Amis", " ".join(problemes))
+            self.notifier("erreur", "Réglage refusé", " ".join(problemes))
             return
         self.controleur.appliquer(nouveaux)
-        self.reglages_page.recharger()
+        # Seul ce réglage est mis à jour dans le formulaire : les modifications en
+        # cours dans les Paramètres ne sont jamais perdues.
+        self.reglages_page.synchroniser(nouveaux)
 
     def _reglages_modifies(self, nouveaux: Reglages) -> None:
         self.appliquer_reglages(nouveaux)
-        # Changement venu d'ailleurs (arrêt du nettoyage par le moteur...) : le
-        # formulaire est remis à jour s'il n'est pas sous les yeux de l'utilisateur.
-        if self.pages.currentIndex() != 4:
-            self.reglages_page.recharger()
+        # Changement venu d'ailleurs (arrêt du nettoyage par le moteur...) : seuls
+        # les réglages que l'utilisateur n'est pas en train de modifier suivent.
+        self.reglages_page.synchroniser(nouveaux)
 
     def _changer_apparence(self, nom: str, valeur: object) -> None:
         """Thème ou animations : enregistrés et appliqués tout de suite."""
@@ -638,7 +705,15 @@ class Fenetre(QMainWindow):
         resultat: list[tuple[str, str]] = [
             ("attention", texte) for texte in self._avertissements_demarrage
         ]
-        if instant.probleme_npsso:
+        if instant.statut is moteur.Statut.CONNEXION_REQUISE:
+            resultat.append(
+                (
+                    "info",
+                    "Aucun compte PSN connecté pour l'instant. Pour commencer : "
+                    "Paramètres › « Changer le code npsso… ».",
+                )
+            )
+        elif instant.probleme_npsso:
             resultat.append(
                 (
                     "erreur",
@@ -691,6 +766,7 @@ class Fenetre(QMainWindow):
         if self.action_pause.text() != texte_pause:
             p = composants.palette_courante()
             self.action_pause.setText(texte_pause)
+            self._boutons_actions["action_pause"].setAccessibleName(texte_pause)
             self.action_pause.setIcon(
                 icones.icone("jouer" if en_pause else "pause", p.texte, 16)
             )
@@ -764,17 +840,31 @@ class Fenetre(QMainWindow):
                 "PSN Amis tourne toujours ici. Clic droit → Quitter pour l'arrêter.",
             )
             return
-        if self.controleur.gestion.vue().operation is not None:
-            reponse = QMessageBox.question(
+        if (
+            self.controleur.gestion.vue().operation is not None
+            and not composants.confirmer(
                 self,
-                "Quitter PSN Amis",
+                "Quitter PSN Amis ?",
                 "Une suppression d'amis est en cours : elle s'arrêtera après l'ami en "
-                "cours de traitement et ne reprendra pas toute seule. Quitter ?",
+                "cours de traitement et ne reprendra pas toute seule.",
+                "Quitter",
+                danger=True,
             )
-            if reponse != QMessageBox.StandardButton.Yes:
-                self._quitter_pour_de_bon = False
-                evenement.ignore()
-                return
+        ):
+            self._quitter_pour_de_bon = False
+            evenement.ignore()
+            return
+        if self.reglages_page.a_des_modifications() and not composants.confirmer(
+            self,
+            "Paramètres non enregistrés",
+            "Des modifications des paramètres n'ont pas été enregistrées. Quitter "
+            "sans les enregistrer ?",
+            "Quitter sans enregistrer",
+            danger=True,
+        ):
+            self._quitter_pour_de_bon = False
+            evenement.ignore()
+            return
         self.minuterie.stop()
         if self.zone is not None:
             self.zone.hide()

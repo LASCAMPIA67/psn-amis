@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
 import time
@@ -19,6 +20,8 @@ from psn_amis.ui.commun import PontJournal, VersInterface
 
 # Pendant une relance, la nouvelle instance attend que l'ancienne ait libéré le verrou.
 ATTENTE_RELANCE = 20
+# Témoin : l'assistant de première utilisation a déjà été proposé.
+FICHIER_ASSISTANT = "assistant.vu"
 
 
 def prendre_le_verrou(relance: bool) -> IO[str] | None:
@@ -28,6 +31,24 @@ def prendre_le_verrou(relance: bool) -> IO[str] | None:
         if verrou is not None or time.monotonic() >= fin:
             return verrou
         time.sleep(0.25)
+
+
+def proposer_assistant(choix: argparse.Namespace) -> bool:
+    """L'assistant de première utilisation : seulement sans code enregistré, et il
+    ne revient pas après un choix explicite (terminé ou « Plus tard »)."""
+    return (
+        not choix.demo
+        and choix.verifier is None
+        and not moteur.code_present()
+        and not (moteur.DOSSIER / FICHIER_ASSISTANT).exists()
+    )
+
+
+def noter_assistant_vu() -> None:
+    with contextlib.suppress(OSError):
+        (moteur.DOSSIER / FICHIER_ASSISTANT).write_text(
+            "Assistant de première utilisation déjà vu.\n", encoding="utf-8"
+        )
 
 
 def icone() -> QIcon:
@@ -104,7 +125,9 @@ def main(choix: argparse.Namespace) -> int:
     journal.addHandler(vers_interface)
 
     suivi = moteur.Suivi(
-        moteur.ajouts_recents_dans_journal(), moteur.retraits_recents_dans_journal()
+        moteur.ajouts_recents_dans_journal(),
+        moteur.retraits_recents_dans_journal(),
+        moteur.suppressions_recentes_dans_journal(),
     )
     controleur = Controleur(
         suivi, moteur.FICHIER_REGLAGES, moteur.DOSSIER, reglages_charges
@@ -132,12 +155,15 @@ def main(choix: argparse.Namespace) -> int:
     etat = {"relancer": False}
 
     def relancer_application() -> None:
-        reponse = QMessageBox.question(
+        from psn_amis.ui import composants
+
+        if composants.confirmer(
             fenetre,
-            "Redémarrer l'application",
-            "PSN Amis va se fermer proprement puis se rouvrir. Continuer ?",
-        )
-        if reponse == QMessageBox.StandardButton.Yes:
+            "Redémarrer PSN Amis ?",
+            "PSN Amis va se fermer proprement (moteur arrêté, réglages gardés) puis "
+            "se rouvrir.",
+            "Redémarrer",
+        ):
             etat["relancer"] = True
             fenetre.quitter()
 
@@ -155,11 +181,11 @@ def main(choix: argparse.Namespace) -> int:
     else:
         fenetre.show()
 
-    premier_lancement = not choix.demo and not moteur.code_present()
-    if premier_lancement and choix.verifier is None:
+    if proposer_assistant(choix):
         from psn_amis.ui.assistant import Assistant
 
         Assistant(controleur.reglages, controleur.appliquer, fenetre).exec()
+        noter_assistant_vu()
     controleur.demarrer()
     if reglages_charges.verifier_mises_a_jour and not choix.demo:
         QTimer.singleShot(3000, lambda: fenetre.rechercher_mise_a_jour(manuelle=False))

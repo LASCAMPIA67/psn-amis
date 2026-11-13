@@ -26,6 +26,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
     QCheckBox,
+    QDialog,
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
@@ -694,3 +695,89 @@ class RangeeAdaptative(QWidget):
             default=0,
         )
         return QSize(plus_large, super().minimumSizeHint().height())
+
+
+# ─── Dialogues au thème de l'application ──────────────────────────────────────
+
+
+class Dialogue(QDialog):
+    """Fenêtre de message ou de confirmation, au thème de PSN Amis (titre, icône,
+    texte, boutons). Échap annule ; pour une action destructrice, le bouton par
+    défaut est « Annuler »."""
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        titre: str,
+        texte: str,
+        niveau: str = "info",
+        bouton: str = "OK",
+        annuler: str | None = None,
+        danger: bool = False,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("PSN Amis")
+        self.setMinimumWidth(420)
+        self.setMaximumWidth(620)
+        p = palette_courante()
+        disposition = QVBoxLayout(self)
+        disposition.setContentsMargins(24, 22, 24, 18)
+        disposition.setSpacing(12)
+        entete = QHBoxLayout()
+        entete.setSpacing(12)
+        icone = QLabel()
+        couleur = getattr(p, niveau, p.info)
+        icone.setPixmap(icones.pixmap(Bandeau.ICONES.get(niveau, "info"), couleur, 28))
+        icone.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.titre = etiquette(titre, "titre_vide", retour_ligne=True)
+        entete.addWidget(icone)
+        entete.addWidget(self.titre, 1)
+        disposition.addLayout(entete)
+        self.texte = etiquette(texte, "discret", retour_ligne=True)
+        self.texte.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        disposition.addWidget(self.texte)
+        disposition.addSpacing(4)
+        boutons = QHBoxLayout()
+        boutons.addStretch(1)
+        self.bouton_annuler: QPushButton | None = None
+        if annuler is not None:
+            self.bouton_annuler = QPushButton(annuler)
+            self.bouton_annuler.clicked.connect(self.reject)
+            boutons.addWidget(self.bouton_annuler)
+        self.bouton_ok = QPushButton(bouton)
+        self.bouton_ok.setObjectName("danger" if danger else "principal")
+        self.bouton_ok.clicked.connect(self.accept)
+        boutons.addWidget(self.bouton_ok)
+        disposition.addLayout(boutons)
+        # Action destructrice : Entrée ne la déclenche pas par accident.
+        defaut = (
+            self.bouton_annuler if danger and self.bouton_annuler else self.bouton_ok
+        )
+        defaut.setDefault(True)
+        defaut.setFocus()
+
+
+def informer(
+    parent: QWidget | None, titre: str, texte: str, niveau: str = "info"
+) -> None:
+    Dialogue(parent, titre, texte, niveau).exec()
+
+
+def confirmer(
+    parent: QWidget | None,
+    titre: str,
+    texte: str,
+    bouton: str = "Continuer",
+    danger: bool = False,
+) -> bool:
+    """Demande une confirmation ; True seulement si l'utilisateur valide."""
+    dialogue = Dialogue(
+        parent,
+        titre,
+        texte,
+        "attention" if danger else "info",
+        bouton,
+        "Annuler",
+        danger,
+    )
+    return dialogue.exec() == QDialog.DialogCode.Accepted

@@ -199,3 +199,19 @@ def moteur_en_marche(faux_sony):
     commandes.arreter()
     fil.join(5)
     moteur.journal.removeHandler(gestionnaire)
+
+
+@pytest.fixture(autouse=True)
+def dialogues(monkeypatch) -> list[tuple[str, str]]:
+    """Aucun dialogue de PSN Amis ne bloque un test : il est noté, puis refusé
+    (« Annuler »), comme si l'utilisateur ne confirmait pas."""
+    from psn_amis.ui import composants
+
+    vus: list[tuple[str, str]] = []
+
+    def exec_(dialogue) -> int:
+        vus.append((dialogue.titre.text(), dialogue.texte.text()))
+        return 0
+
+    monkeypatch.setattr(composants.Dialogue, "exec", exec_)
+    return vus

@@ -162,7 +162,9 @@ def main(choix: argparse.Namespace) -> int:
         return 1
     moteur.baisser_priorite()
     suivi = moteur.Suivi(
-        moteur.ajouts_recents_dans_journal(), moteur.retraits_recents_dans_journal()
+        moteur.ajouts_recents_dans_journal(),
+        moteur.retraits_recents_dans_journal(),
+        moteur.suppressions_recentes_dans_journal(),
     )
     commandes = moteur.Commandes()
     fin = Fin(suivi, commandes, verrou, noter=not choix.test)

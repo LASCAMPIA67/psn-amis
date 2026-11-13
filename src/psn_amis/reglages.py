@@ -98,8 +98,8 @@ class Reglages:
         MOTEUR,
         "Intervalle de vérification",
         "Secondes entre deux vérifications (demandes reçues, puis liste d'amis). "
-        "Avec 15, PSN Amis fait 8 requêtes par minute quand il ne se passe rien ; "
-        "PSNAWP, la bibliothèque utilisée, en autorise 20.",
+        "Chaque vérification fait environ deux requêtes quand il ne se passe rien ; "
+        "PSNAWP, la bibliothèque utilisée, en autorise au plus 20 par minute.",
         bornes=(5, 3600),
         unite="s",
     )

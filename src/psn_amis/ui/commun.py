@@ -116,6 +116,7 @@ STATUTS: dict[Statut, tuple[str, str, str]] = {
     Statut.LISTE_PLEINE: ("⚠", "attention", "Liste d'amis pleine"),
     Statut.ERREUR: ("✖", "erreur", "Erreur"),
     Statut.SUPPRESSION: ("✂", "info", "Gestion des amis"),
+    Statut.CONNEXION_REQUISE: ("◌", "info", "Connexion PSN nécessaire"),
 }
 
 # Niveau du journal → (symbole, clé de couleur, nom).

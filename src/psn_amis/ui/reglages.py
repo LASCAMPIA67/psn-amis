@@ -8,7 +8,7 @@ tout n'est pas valide.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +24,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGridLayout,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
-    QPushButton,
     QScrollArea,
     QSpinBox,
     QTabWidget,
@@ -40,6 +38,8 @@ from psn_amis.ui import composants, theme
 from psn_amis.ui.commun import etiquette
 from psn_amis.ui.composants import Interrupteur, palette_courante
 
+# Titres courts des onglets (le titre complet est dans l'info-bulle).
+TITRES_ONGLETS = {"Gestion des amis": "Amis", "Nettoyage automatique": "Nettoyage"}
 # Réglages de l'onglet Apparence (appliqués dès qu'on les choisit).
 APPARENCE = ("theme", "animations")
 # Réglages présentés mais pas modifiables, avec la raison.
@@ -247,6 +247,10 @@ class PageReglages(QWidget):
         self.champs: dict[str, QWidget] = {}
 
         onglets = QTabWidget()
+        self.onglets = onglets
+        self._groupe_onglet: dict[str, int] = {}
+        onglets.tabBar().setUsesScrollButtons(True)
+        onglets.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         onglets.setDocumentMode(True)
         onglets.addTab(self._page_apparence(), "Apparence")
         groupes: dict[str, QFormLayout] = {}
@@ -264,7 +268,11 @@ class PageReglages(QWidget):
                 defilement = QScrollArea()
                 defilement.setWidgetResizable(True)
                 defilement.setWidget(page)
-                onglets.addTab(defilement, meta["groupe"])
+                rang = onglets.addTab(
+                    defilement, TITRES_ONGLETS.get(meta["groupe"], meta["groupe"])
+                )
+                onglets.setTabToolTip(rang, meta["groupe"])
+                self._groupe_onglet[meta["groupe"]] = rang
                 groupes[meta["groupe"]] = formulaire
             widget = self._creer(champ.name, getattr(Reglages(), champ.name), meta)
             self.champs[champ.name] = widget
@@ -284,6 +292,11 @@ class PageReglages(QWidget):
                 widget.setMaximumWidth(340)
             disposition.addWidget(widget)
             disposition.addWidget(description)
+            if champ.name == "intervalle_verification":
+                self.estimation = etiquette("", "tertiaire", retour_ligne=True)
+                disposition.addWidget(self.estimation)
+                widget.valueChanged.connect(self._estimer)
+            self._suivre(widget)
             if isinstance(widget, QCheckBox):
                 # La case porte déjà son libellé.
                 groupes[meta["groupe"]].addRow(bloc)
@@ -295,13 +308,21 @@ class PageReglages(QWidget):
         enregistrer.setToolTip("Vérifie puis enregistre les réglages (Ctrl+S)")
         enregistrer.setShortcut("Ctrl+S")
         enregistrer.clicked.connect(self.enregistrer)
-        annuler = QPushButton("Annuler les modifications")
-        annuler.clicked.connect(self.recharger)
-        defaut = QPushButton("Valeurs par défaut")
-        defaut.setToolTip(
-            "Remet les valeurs par défaut dans le formulaire (à enregistrer)"
+        annuler = composants.bouton(
+            "Annuler les modifications",
+            "erreur",
+            aide="Revient aux réglages enregistrés",
         )
-        defaut.clicked.connect(lambda: self.remplir(Reglages()))
+        annuler.clicked.connect(self.recharger)
+        defaut = composants.bouton(
+            "Valeurs par défaut",
+            "redemarrer",
+            aide="Remet les valeurs par défaut dans le formulaire (à enregistrer ensuite)",
+        )
+        defaut.clicked.connect(self.valeurs_par_defaut)
+        self.bouton_enregistrer = enregistrer
+        self.bouton_annuler = annuler
+        self.bouton_defaut = defaut
         importer = composants.bouton("Importer…", "importer")
         importer.clicked.connect(self.importer)
         exporter = composants.bouton("Exporter…", "exporter")
@@ -464,24 +485,134 @@ class PageReglages(QWidget):
         return widget.text() if isinstance(widget, QLineEdit) else None
 
     def remplir(self, valeurs: Reglages) -> None:
-        for nom, widget in self.champs.items():
-            valeur = getattr(valeurs, nom)
-            if isinstance(widget, GalerieThemes):
-                widget.choisir(valeur)
-            elif isinstance(widget, QCheckBox):
-                widget.setChecked(bool(valeur))
-            elif isinstance(widget, QComboBox):
-                widget.setCurrentIndex(max(0, widget.findData(valeur)))
-            elif isinstance(widget, QSpinBox | QDoubleSpinBox):
-                widget.setValue(valeur)
-            elif isinstance(widget, QPlainTextEdit):
-                widget.setPlainText("\n".join(valeur))
-            elif isinstance(widget, QLineEdit):
-                widget.setText(str(valeur))
+        for nom in self.champs:
+            self._remplir_champ(nom, getattr(valeurs, nom))
+
+    def _remplir_champ(self, nom: str, valeur: Any) -> None:
+        widget = self.champs[nom]
+        if isinstance(widget, GalerieThemes):
+            widget.choisir(valeur)
+        elif isinstance(widget, QCheckBox):
+            widget.setChecked(bool(valeur))
+        elif isinstance(widget, QComboBox):
+            widget.setCurrentIndex(max(0, widget.findData(valeur)))
+        elif isinstance(widget, QSpinBox | QDoubleSpinBox):
+            widget.setValue(valeur)
+        elif isinstance(widget, QPlainTextEdit):
+            widget.setPlainText("\n".join(valeur))
+        elif isinstance(widget, QLineEdit):
+            widget.setText(str(valeur))
 
     def recharger(self) -> None:
-        self.remplir(self._actuels())
+        """Revient aux réglages enregistrés (toutes les modifications sont annulées)."""
+        self._enregistres = self._actuels()
+        self._chargement = True
+        self.remplir(self._enregistres)
+        self._chargement = False
         self.message.setText("")
+        self.message.setObjectName("discret")
+        self._mettre_a_jour()
+
+    def synchroniser(self, nouveaux: Reglages) -> None:
+        """Réglages changés ailleurs (page Demandes, moteur, thème) : seuls les champs
+        que l'utilisateur n'est pas en train de modifier suivent ; ses modifications
+        en cours ne sont jamais perdues."""
+        anciens = getattr(self, "_enregistres", nouveaux)
+        self._chargement = True
+        for nom in self.champs:
+            if nom in self._verrous:
+                continue
+            if self._egal(nom, self._valeur(nom), getattr(anciens, nom)):
+                self._remplir_champ(nom, getattr(nouveaux, nom))
+        self._chargement = False
+        self._enregistres = nouveaux
+        self._mettre_a_jour()
+
+    def ouvrir_onglet(self, groupe: str) -> None:
+        """Affiche un onglet par son groupe (« Demandes »…)."""
+        if groupe in self._groupe_onglet:
+            self.onglets.setCurrentIndex(self._groupe_onglet[groupe])
+
+    # ─── Suivi des modifications ───
+
+    @staticmethod
+    def _egal(nom: str, a: Any, b: Any) -> bool:
+        try:
+            return reglages.normaliser(nom, a) == reglages.normaliser(nom, b)
+        except TypeError, ValueError:
+            return a == b
+
+    def modifies(self) -> set[str]:
+        """Les réglages changés dans le formulaire et pas encore enregistrés."""
+        enregistres = getattr(self, "_enregistres", self._actuels())
+        return {
+            nom
+            for nom in self.champs
+            if nom not in APPARENCE
+            and nom not in self._verrous
+            and not self._egal(nom, self._valeur(nom), getattr(enregistres, nom))
+        }
+
+    def a_des_modifications(self) -> bool:
+        return bool(self.modifies())
+
+    def _suivre(self, widget: QWidget) -> None:
+        for signal in ("toggled", "currentIndexChanged", "valueChanged", "textChanged"):
+            if hasattr(widget, signal):
+                getattr(widget, signal).connect(self._mettre_a_jour)
+                return
+
+    def _mettre_a_jour(self, *_: object) -> None:
+        """Boutons et repères selon l'état réel des modifications."""
+        if getattr(self, "_chargement", False) or not hasattr(
+            self, "bouton_enregistrer"
+        ):
+            return
+        modifies = self.modifies()
+        self.bouton_enregistrer.setVisible(bool(modifies))
+        self.bouton_annuler.setVisible(bool(modifies))
+        defauts = Reglages()
+        differe = any(
+            not self._egal(nom, self._valeur(nom), getattr(defauts, nom))
+            for nom in self.champs
+            if nom not in APPARENCE and nom not in self._verrous
+        )
+        self.bouton_defaut.setVisible(differe)
+        # Onglets marqués d'un point s'ils contiennent des modifications.
+        groupes = {reglages.info(nom)["groupe"] for nom in modifies}
+        for groupe, rang in self._groupe_onglet.items():
+            titre = TITRES_ONGLETS.get(groupe, groupe)
+            self.onglets.setTabText(rang, f"{titre} •" if groupe in groupes else titre)
+        if modifies:
+            self._afficher(
+                "attention",
+                f"{len(modifies)} réglage(s) modifié(s), pas encore enregistré(s) : "
+                "Enregistrer pour les garder, ou Annuler les modifications.",
+            )
+        elif self.message.objectName() == "bandeau_attention":
+            self.message.setText("")
+        if hasattr(self, "estimation"):
+            self._estimer()
+
+    def _estimer(self, *_: object) -> None:
+        secondes = max(1, int(self._valeur("intervalle_verification")))
+        par_minute = 2 * 60 / secondes
+        self.estimation.setText(
+            f"Avec {secondes} s : environ {par_minute:.1f} requête(s) par minute quand il "
+            "ne se passe rien (estimation, hors acceptations ; PSNAWP en autorise 20)."
+        )
+
+    def valeurs_par_defaut(self) -> None:
+        """Valeurs par défaut dans le formulaire ; le thème et les animations
+        (appliqués immédiatement) ne sont pas touchés."""
+        enregistres = getattr(self, "_enregistres", self._actuels())
+        defauts = replace(
+            Reglages(), **{nom: getattr(enregistres, nom) for nom in APPARENCE}
+        )
+        for nom in self.champs:
+            if nom not in APPARENCE and nom not in self._verrous:
+                self._remplir_champ(nom, getattr(defauts, nom))
+        self._mettre_a_jour()
 
     def lire(self) -> tuple[Reglages, list[str]]:
         """Les réglages du formulaire, vérifiés comme ceux du fichier."""
@@ -503,8 +634,10 @@ class PageReglages(QWidget):
                 "erreur", "Rien n'a été enregistré : " + " ".join(resultat.problemes)
             )
             return False
+        self._enregistres = nouveaux
+        self._mettre_a_jour()
         if not resultat.effets:
-            self._afficher("info", "✔ Enregistré et appliqué immédiatement.")
+            self._afficher("succes", "✔ Enregistré et appliqué immédiatement.")
         else:
             besoins = " et ".join(sorted(e.value for e in resultat.effets))
             self._afficher(
@@ -527,11 +660,24 @@ class PageReglages(QWidget):
         if not chemin:
             return
         lus, problemes = reglages.importer(Path(chemin))
-        self.remplir(lus)
-        texte = "Réglages importés dans le formulaire : vérifiez puis enregistrez."
+        for nom in self.champs:
+            if nom not in APPARENCE and nom not in self._verrous:
+                self._remplir_champ(nom, getattr(lus, nom))
+        # Thème et animations s'appliquent tout de suite, comme dans l'onglet Apparence.
+        enregistres = getattr(self, "_enregistres", self._actuels())
+        for nom in APPARENCE:
+            if getattr(lus, nom) != getattr(enregistres, nom):
+                self._apparence(nom, getattr(lus, nom))
+        self._mettre_a_jour()
+        if not self.a_des_modifications():
+            texte = "Ces réglages sont déjà ceux en place : rien à enregistrer."
+        else:
+            texte = (
+                "Réglages importés dans le formulaire : vérifiez-les puis enregistrez."
+            )
         if problemes:
             texte += " Problèmes : " + " ".join(problemes)
-        self._afficher("attention", texte)
+        self._afficher("attention" if problemes else "info", texte)
 
     def exporter(self) -> None:
         chemin, _ = QFileDialog.getSaveFileName(
@@ -541,4 +687,10 @@ class PageReglages(QWidget):
             try:
                 reglages.exporter(self._actuels(), Path(chemin))
             except OSError as erreur:
-                QMessageBox.warning(self, "PSN Amis", f"Export impossible : {erreur}")
+                self._afficher(
+                    "erreur", f"Export impossible : {erreur.strerror or erreur}"
+                )
+            else:
+                self._afficher(
+                    "succes", f"✔ Réglages exportés dans {Path(chemin).name}."
+                )

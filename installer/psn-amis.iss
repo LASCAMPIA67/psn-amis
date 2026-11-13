@@ -167,6 +167,7 @@ begin
   Effacer(Dossier, 'diagnostic.txt.1');
   Effacer(Dossier, 'amis.json');
   Effacer(Dossier, 'migration.json');
+  Effacer(Dossier, 'assistant.vu');
   Effacer(Dossier, 'psn-amis.lock');
   if AvecCode then
     Effacer(Dossier, 'npsso.txt');

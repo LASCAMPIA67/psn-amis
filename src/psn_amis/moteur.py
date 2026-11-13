@@ -365,6 +365,8 @@ class Statut(StrEnum):
     HORS_LIGNE = "hors ligne"
     ATTENTE = "attente"
     CODE_NPSSO = "code npsso"
+    # Aucun code configuré : il faut connecter un compte (premier lancement).
+    CONNEXION_REQUISE = "connexion requise"
     LISTE_PLEINE = "liste pleine"
     ERREUR = "erreur"
     SUPPRESSION = "gestion des amis"
@@ -433,6 +435,7 @@ class Suivi:
         self,
         ajouts_recents: list[Ajout] | None = None,
         retraits_recents: list[Ajout] | None = None,
+        suppressions_recentes: list[Ajout] | None = None,
     ) -> None:
         ajouts = sorted(ajouts_recents or [], key=lambda ajout: ajout.moment)
         retraits = sorted(retraits_recents or [], key=lambda retrait: retrait.moment)
@@ -458,7 +461,9 @@ class Suivi:
         self._probleme_npsso: str | None = None
         self._amis_comptes_a: datetime | None = None
         self._supprimes_session = 0
-        self._supprimes_jour = 0
+        self._supprimes_jour = sum(
+            s.moment.date() == self._jour for s in suppressions_recentes or []
+        )
 
     def statut(
         self, statut: Statut, detail: str = "", prochaine_dans: float | None = None
@@ -486,6 +491,14 @@ class Suivi:
             self._nombre_amis = nombre
             self._amis_comptes_a = datetime.now()
             return avant
+
+    def connexion_requise(self, texte: str) -> None:
+        """Aucun code enregistré : ce n'est pas une erreur, il faut connecter un compte."""
+        with self._verrou:
+            self._statut = Statut.CONNEXION_REQUISE
+            self._detail = "Connectez votre compte PSN pour commencer"
+            self._prochaine = None
+            self._probleme_npsso = masquer(texte)
 
     def code_a_changer(self, texte: str) -> None:
         with self._verrou:
@@ -626,6 +639,9 @@ class Commandes:
 MOTIF_AJOUT = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Demande acceptée : (.+)$"
 )
+MOTIF_SUPPRESSION = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Ami supprimé par PSN Amis : (.+)$"
+)
 MOTIF_RETRAIT = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})  Ami retiré(?: pendant l'arrêt)? : (.+)$"
 )
@@ -660,6 +676,11 @@ def _dans_journal(motif: re.Pattern[str], depuis: datetime) -> list[Ajout]:
 def ajouts_recents_dans_journal(heures: int = HEURES_RELUES) -> list[Ajout]:
     """Les ajouts des dernières heures, relus dans journal.txt au démarrage."""
     return _dans_journal(MOTIF_AJOUT, datetime.now() - timedelta(hours=heures))
+
+
+def suppressions_recentes_dans_journal(heures: int = HEURES_RELUES) -> list[Ajout]:
+    """Les amis supprimés par PSN Amis ces dernières heures (relus au démarrage)."""
+    return _dans_journal(MOTIF_SUPPRESSION, datetime.now() - timedelta(hours=heures))
 
 
 def retraits_recents_dans_journal(heures: int = HEURES_RELUES) -> list[Ajout]:
@@ -698,6 +719,10 @@ def statistiques_par_jour(jours: int = 7) -> list[tuple[date, int, int]]:
 # ─── Code npsso ───────────────────────────────────────────────────────────────
 class ProblemeNpsso(Exception):
     """Le code npsso est absent, illisible ou mal formé."""
+
+
+class AucunCode(ProblemeNpsso):
+    """Aucun code npsso n'a encore été configuré (compte pas encore connecté)."""
 
 
 def extraire_npsso(texte: str, origine: str) -> str:
@@ -743,8 +768,8 @@ def _lire_fichier_npsso() -> str:
     try:
         brut = FICHIER_NPSSO.read_bytes()
     except FileNotFoundError:
-        raise ProblemeNpsso(
-            f"le fichier npsso.txt est introuvable dans {DOSSIER}."
+        raise AucunCode(
+            f"aucun code enregistré (npsso.txt introuvable dans {DOSSIER})."
         ) from None
     except OSError:
         raise ProblemeNpsso("Windows refuse d'ouvrir npsso.txt.") from None
@@ -780,7 +805,7 @@ def lire_npsso() -> str:
         return code
     depuis_le_coffre = coffre.lire()
     if not depuis_le_coffre:
-        raise ProblemeNpsso(
+        raise AucunCode(
             "aucun code enregistré (ni dans le coffre de Windows, ni dans npsso.txt)."
         )
     return extraire_npsso(depuis_le_coffre, "le code du coffre de Windows")
@@ -946,8 +971,12 @@ def connecter(suivi: Suivi, commandes: Commandes, attendre: bool) -> Connexion |
     while not commandes.arret.is_set():
         suivi.statut(Statut.CONNEXION, "Connexion aux serveurs de Sony…")
         journal.info("Connexion aux serveurs de Sony...", extra=ECRAN_SEULEMENT)
+        aucun_code = False
         try:
             connexion = ouvrir_connexion(lire_npsso())
+        except AucunCode as probleme:
+            aucun_code = True
+            texte = f"Connexion PSN nécessaire : {probleme}"
         except ProblemeNpsso as probleme:
             texte = f"PROBLÈME avec le code npsso : {probleme}"
         except PSNAWPAuthenticationError:
@@ -955,10 +984,15 @@ def connecter(suivi: Suivi, commandes: Commandes, attendre: bool) -> Connexion |
         else:
             suivi.code_valide()
             return connexion
-        journal.error("%s", texte)
-        suivi.code_a_changer(texte)
+        if aucun_code:
+            # Premier lancement : rien d'anormal, pas de bulle d'alerte Windows.
+            journal.warning("%s", texte)
+            suivi.connexion_requise(texte)
+        else:
+            journal.error("%s", texte)
+            suivi.code_a_changer(texte)
         journal.info(AIDE_NPSSO, extra=AIDE)
-        if not deja_alerte:
+        if not deja_alerte and not aucun_code:
             deja_alerte = True
             alerter("PSN Amis : code npsso à changer", texte)
         if not attendre:

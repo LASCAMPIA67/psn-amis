@@ -15,7 +15,7 @@ import requests
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEventLoop, Qt, QTimer
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog
 
 from psn_amis import moteur, reglages
 from psn_amis.amis import Resultat
@@ -78,6 +78,7 @@ def fenetre(application, sony, dossier, monkeypatch):
     assert attendre_qt(lambda: controleur.gestion.vue().liste_complete)
     yield fenetre
     controleur.attendre_arret(10)
+    fenetre.reglages_page.recharger()
     fenetre._quitter_pour_de_bon = True
     fenetre.close()
     moteur.journal.removeHandler(gestionnaire)
@@ -303,7 +304,7 @@ def test_assistant_applique_les_premiers_reglages(application):
 
 
 def test_quitter_pendant_une_suppression_demande_confirmation(
-    fenetre, sony, monkeypatch
+    fenetre, sony, monkeypatch, dialogues
 ):
     monkeypatch.setattr(
         moteur, "REGLAGES", replace(moteur.REGLAGES, suppression_pause=30)
@@ -312,29 +313,8 @@ def test_quitter_pendant_une_suppression_demande_confirmation(
     gestion.demander_suppression(gestion.selection_manuelle(sorted(sony.amis)[:3]))
     fenetre.controleur.verifier_maintenant()
     assert attendre_qt(lambda: gestion.vue().operation is not None)
-    questions: list[str] = []
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda *a, **k: questions.append(a[1]) or QMessageBox.StandardButton.No,
-    )
     fenetre.close()
-    assert questions == ["Quitter PSN Amis"]
+    # Confirmation demandée, refusée : la fenêtre reste ouverte.
+    assert dialogues[-1][0] == "Quitter PSN Amis ?"
     assert fenetre.isVisible()
     gestion.annuler()
-
-
-def test_nettoyage_coupe_par_le_moteur_visible_dans_la_fenetre(fenetre):
-    controleur = fenetre.controleur
-    automatique, _ = reglages.modifier(
-        controleur.reglages, nettoyage_mode="automatique"
-    )
-    assert controleur.appliquer(automatique).enregistre
-    fenetre.reglages_page.recharger()
-    # Comme le moteur quand il détecte un cycle : depuis un autre fil que l'interface.
-    fil = threading.Thread(target=controleur._couper_nettoyage, args=("cycle",))
-    fil.start()
-    fil.join(5)
-    assert controleur.reglages.nettoyage_mode == "manuel"
-    champ = fenetre.reglages_page.champs["nettoyage_mode"]
-    assert attendre_qt(lambda: champ.currentData() == "manuel")

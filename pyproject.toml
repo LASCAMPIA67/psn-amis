@@ -97,6 +97,7 @@ ignore = [
 "tests/**" = ["S101", "S603"]
 # Fixtures de la fenêtre partagées avec test_interface.py.
 "tests/test_apparence.py" = ["F811"]
+"tests/test_recette.py" = ["F811"]
 # Chaque réglage est déclaré par une fonction qui renvoie un field() de dataclass.
 "src/psn_amis/reglages.py" = ["RUF009"]
 

@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLineEdit,
     QListWidget,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -71,6 +70,11 @@ SYMBOLES_PROTECTION = {
     Verdict.DOUTE: "? incertain",
     Verdict.LIBRE: "—",
 }
+
+
+def nombre(n: int, singulier: str, pluriel: str) -> str:
+    """« 1 ami protégé », « 3 amis protégés »."""
+    return f"{n} {singulier if n <= 1 else pluriel}"
 
 
 class ModeleAmis(QAbstractTableModel):
@@ -303,6 +307,10 @@ class PageAmis(QWidget):
         self.gestion = gestion
         self._verifier = verifier
         self._version = -1
+        # Notifications de la fenêtre (remplacé par Fenetre.notifier).
+        self.notifier = lambda niveau, titre, texte="", duree_ms=4500: (
+            composants.informer(self, titre, texte, niveau)
+        )
 
         self.entete = etiquette("Connexion à Sony en attente…", retour_ligne=True)
         self.bandeaux = QVBoxLayout()
@@ -366,10 +374,12 @@ class PageAmis(QWidget):
             aide="Protège les amis cochés contre toute suppression",
         )
         proteger.clicked.connect(self._proteger_coches)
+        self.bouton_proteger = proteger
         deproteger = composants.bouton(
             "Déprotéger", "erreur", aide="Retire la protection des amis cochés"
         )
         deproteger.clicked.connect(self._deproteger_coches)
+        self.bouton_deproteger = deproteger
         self.supprimer_coches = composants.bouton(
             "Supprimer…",
             "poubelle",
@@ -463,6 +473,7 @@ class PageAmis(QWidget):
         ajouter.clicked.connect(self._ajouter_protege)
         retirer = composants.bouton("Retirer", "erreur", "plat")
         retirer.clicked.connect(self._retirer_protege)
+        self.bouton_retirer = retirer
         importer = composants.bouton(
             "Importer…", "importer", "plat", "Fichier exporté, ou un pseudo par ligne"
         )
@@ -543,6 +554,14 @@ class PageAmis(QWidget):
         disposition.setContentsMargins(0, 0, 0, 0)
         disposition.addWidget(defilement)
         self._bandeaux_actuels: tuple = ()
+        # Boutons actifs seulement s'ils ont un effet (cases, sélection, protégé choisi).
+        self.table.selectionModel().selectionChanged.connect(
+            self._mettre_a_jour_actions
+        )
+        self.modele.dataChanged.connect(self._mettre_a_jour_actions)
+        self.modele.modelReset.connect(self._mettre_a_jour_actions)
+        self.liste_proteges.currentItemChanged.connect(self._mettre_a_jour_actions)
+        self._mettre_a_jour_actions()
 
     # Largeur en dessous de laquelle les deux panneaux s'empilent.
     LARGEUR_EMPILEE = 1000
@@ -583,7 +602,9 @@ class PageAmis(QWidget):
         if list(vue.amis) != self.modele.lignes:
             # Seulement si la liste a changé : le défilement et le tri restent.
             premiere_fois = not self.modele.lignes
+            selectionnes = {ligne.compte for ligne in self._lignes_selectionnees()}
             self.modele.remplacer(vue.amis)
+            self._reselectionner(selectionnes)
             if premiere_fois:
                 self.table.resizeColumnsToContents()
                 self.table.setColumnWidth(0, max(self.table.columnWidth(0), 220))
@@ -605,7 +626,10 @@ class PageAmis(QWidget):
             element = self.liste_proteges.item(self.liste_proteges.count() - 1)
             element.setData(Qt.ItemDataRole.UserRole, protection.cle)
         if not vue.proteges:
-            self.liste_proteges.addItem("Aucun ami protégé.")
+            self.liste_proteges.addItem("Aucun ami protégé pour l'instant.")
+            # Message seulement : ni sélectionnable ni « retirable ».
+            self.liste_proteges.item(0).setFlags(Qt.ItemFlag.NoItemFlags)
+        self._mettre_a_jour_actions()
 
     def _afficher_operation(self, vue: Vue) -> None:
         operation = vue.operation or vue.derniere_operation
@@ -692,15 +716,65 @@ class PageAmis(QWidget):
                 )
             self.bandeaux.addWidget(bandeau)
 
+    def _lignes_selectionnees(self) -> list[LigneAmi]:
+        """Les lignes mises en évidence (clic, Maj, Ctrl) dans le tableau."""
+        modele_selection = self.table.selectionModel()
+        if modele_selection is None:
+            return []
+        rangs = {
+            self.proxy.mapToSource(index).row()
+            for index in modele_selection.selectedRows()
+        }
+        return [
+            self.modele.lignes[r] for r in sorted(rangs) if r < len(self.modele.lignes)
+        ]
+
+    def _reselectionner(self, comptes: set[str]) -> None:
+        if not comptes:
+            return
+        from PySide6.QtCore import QItemSelection, QItemSelectionModel
+
+        selection = QItemSelection()
+        for rang, ligne in enumerate(self.modele.lignes):
+            if ligne.compte in comptes:
+                index = self.proxy.mapFromSource(self.modele.index(rang, 0))
+                if index.isValid():
+                    selection.select(index, index)
+        self.table.selectionModel().select(
+            selection,
+            QItemSelectionModel.SelectionFlag.ClearAndSelect
+            | QItemSelectionModel.SelectionFlag.Rows,
+        )
+
+    def cibles_action(self) -> list[LigneAmi]:
+        """Les amis visés par Protéger, Déprotéger et Supprimer : les cochés, sinon
+        les lignes sélectionnées. Identifiés par leur identifiant de compte."""
+        coches = self._lignes_cochees()
+        return coches or self._lignes_selectionnees()
+
+    def _mettre_a_jour_actions(self, *_: object) -> None:
+        cibles = self.cibles_action()
+        for bouton in (
+            self.bouton_proteger,
+            self.bouton_deproteger,
+            self.supprimer_coches,
+        ):
+            bouton.setEnabled(bool(cibles))
+        self.bouton_retirer.setEnabled(
+            self.liste_proteges.currentItem() is not None
+            and bool(self.liste_proteges.currentItem().data(Qt.ItemDataRole.UserRole))
+        )
+
     def _compter_coches(self, *_: object) -> None:
         n = len(self.modele.coches)
         self.coches.setText(f"{n} coché{'s' if n > 1 else ''}")
-        self.supprimer_coches.setEnabled(n > 0)
+        if hasattr(self, "bouton_retirer"):
+            self._mettre_a_jour_actions()
 
     # ─── Actions ───
 
     def _erreur(self, erreur: Exception | str) -> None:
-        QMessageBox.warning(self, "PSN Amis", f"Impossible : {erreur}")
+        self.notifier("erreur", "Action impossible", str(erreur))
 
     def _actualiser(self) -> None:
         self._verifier()
@@ -726,18 +800,65 @@ class PageAmis(QWidget):
         return [x for x in self.modele.lignes if x.compte in self.modele.coches]
 
     def _proteger_coches(self) -> None:
+        cibles = self.cibles_action()
+        if not cibles:
+            self.notifier(
+                "info", "Aucun ami choisi", "Cochez ou sélectionnez des amis."
+            )
+            return
+        ajoutees = 0
         try:
-            for ligne in self._lignes_cochees():
+            for ligne in cibles:
+                if ligne.protection is Verdict.PROTEGE:
+                    continue
+                # Par identifiant de compte : un changement de pseudo ne change rien.
                 self.gestion.proteger(ligne.pseudo or ligne.compte, ligne.compte)
+                ajoutees += 1
         except ValueError as erreur:
             self._erreur(erreur)
+            return
+        if ajoutees:
+            self.notifier(
+                "succes",
+                nombre(ajoutees, "ami protégé", "amis protégés"),
+                "Ils ne seront jamais supprimés.",
+            )
+        else:
+            self.notifier(
+                "info",
+                "Aucune nouvelle protection",
+                "Les amis choisis sont déjà protégés.",
+            )
+        self.actualiser()
 
     def _deproteger_coches(self) -> None:
+        cibles = self.cibles_action()
+        if not cibles:
+            self.notifier(
+                "info", "Aucun ami choisi", "Cochez ou sélectionnez des amis."
+            )
+            return
+        retirees = 0
         try:
-            for ligne in self._lignes_cochees():
-                self.gestion.deproteger(ligne.compte)
+            for ligne in cibles:
+                cles = [ligne.compte]
+                if ligne.pseudo:
+                    cles.append(f"pseudo:{ligne.pseudo.casefold()}")
+                if any(self.gestion.deproteger(cle) for cle in cles):
+                    retirees += 1
         except ValueError as erreur:
             self._erreur(erreur)
+            return
+        if retirees:
+            self.notifier(
+                "succes",
+                nombre(retirees, "protection retirée", "protections retirées"),
+            )
+        else:
+            self.notifier(
+                "info", "Aucune protection retirée", "Ces amis n'étaient pas protégés."
+            )
+        self.actualiser()
 
     def _ajouter_protege(self) -> None:
         pseudo = self.nouveau_protege.text().strip()
@@ -754,8 +875,15 @@ class PageAmis(QWidget):
     def _retirer_protege(self) -> None:
         element = self.liste_proteges.currentItem()
         cle = element.data(Qt.ItemDataRole.UserRole) if element else None
-        if cle:
-            self.gestion.deproteger(cle)
+        if not cle:
+            self.notifier(
+                "info", "Aucun ami protégé choisi", "Sélectionnez-le dans la liste."
+            )
+            return
+        nom = element.text().split("  (", 1)[0]
+        if self.gestion.deproteger(cle):
+            self.notifier("succes", "Protection retirée", f"{nom} n'est plus protégé.")
+        self.actualiser()
 
     def _importer(self) -> None:
         chemin, _ = QFileDialog.getOpenFileName(
@@ -768,10 +896,19 @@ class PageAmis(QWidget):
         except (OSError, ValueError) as erreur:
             self._erreur(erreur)
             return
-        QMessageBox.information(
-            self, "PSN Amis", f"{ajoutees} protection(s) ajoutée(s)."
-        )
-        self._verifier()
+        if ajoutees:
+            self.notifier(
+                "succes",
+                nombre(ajoutees, "protection ajoutée", "protections ajoutées"),
+                Path(chemin).name,
+            )
+        else:
+            self.notifier(
+                "info",
+                "Aucune nouvelle protection",
+                "Les amis de ce fichier sont déjà protégés.",
+            )
+        self.actualiser()
 
     def _exporter(self) -> None:
         chemin, _ = QFileDialog.getSaveFileName(
@@ -782,6 +919,8 @@ class PageAmis(QWidget):
                 self.gestion.exporter_protections(Path(chemin))
             except (OSError, ValueError) as erreur:
                 self._erreur(erreur)
+            else:
+                self.notifier("succes", "Protections exportées", Path(chemin).name)
 
     def _apercu_par_nombre(self) -> None:
         try:
@@ -795,7 +934,9 @@ class PageAmis(QWidget):
 
     def _supprimer_coches(self) -> None:
         try:
-            selection = self.gestion.selection_manuelle(sorted(self.modele.coches))
+            selection = self.gestion.selection_manuelle(
+                sorted(ligne.compte for ligne in self.cibles_action())
+            )
         except ValueError as erreur:
             self._erreur(erreur)
             return

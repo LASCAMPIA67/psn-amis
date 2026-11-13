@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from psn_amis.controleur import EtatMoteur
 from psn_amis.gestion import Vue
-from psn_amis.moteur import Instantane, en_amis
+from psn_amis.moteur import Instantane, Statut, en_amis
 from psn_amis.ui.commun import STATUTS, Message, apparence, date_courte
 from psn_amis.ui.composants import (
     Bandeau,
@@ -38,6 +38,34 @@ from psn_amis.ui.composants import (
     fondu_entrant,
 )
 from psn_amis.ui.theme import Palette
+
+
+def etat_automatisation(
+    instant: Instantane, etat_moteur: EtatMoteur, en_pause: bool, acceptation_auto: bool
+) -> tuple[str, str]:
+    """Ce qui se passe vraiment pour les demandes (pas seulement le réglage)."""
+    if etat_moteur is EtatMoteur.ARRET_EN_COURS:
+        return "Arrêt en cours : aucune acceptation", "attention"
+    if etat_moteur is not EtatMoteur.EN_MARCHE:
+        return "Moteur arrêté : aucune acceptation", "discret"
+    if instant.statut is Statut.CONNEXION_REQUISE:
+        return "En attente de connexion PSN", "info"
+    if instant.statut in (Statut.DEMARRAGE, Statut.CONNEXION):
+        return "Connexion à Sony en cours", "info"
+    if instant.statut in (
+        Statut.CODE_NPSSO,
+        Statut.HORS_LIGNE,
+        Statut.ERREUR,
+        Statut.ATTENTE,
+    ):
+        return "Acceptations suspendues (connexion)", "attention"
+    if instant.statut is Statut.LISTE_PLEINE:
+        return "Liste pleine : acceptations suspendues", "attention"
+    if en_pause:
+        return "Acceptations en pause", "attention"
+    if not acceptation_auto:
+        return "Acceptation automatique coupée", "discret"
+    return "Acceptation automatique en cours", "succes"
 
 
 def il_y_a(moment: datetime | None, maintenant: datetime) -> str:
@@ -229,12 +257,10 @@ class TableauDeBord(QWidget):
             if instant.pseudo_compte
             else "Compte PSN : pas encore connecté",
         )
-        if en_pause:
-            self.automatisation.afficher("Acceptations en pause", "attention")
-        elif not acceptation_auto:
-            self.automatisation.afficher("Acceptation automatique coupée", "discret")
-        else:
-            self.automatisation.afficher("Acceptation automatique active", "succes")
+        texte, cle_auto = etat_automatisation(
+            instant, etat_moteur, en_pause, acceptation_auto
+        )
+        self.automatisation.afficher(texte, cle_auto)
 
         self.capacite.setRange(0, max(1, limite))
         if instant.nombre_amis is None:
@@ -253,20 +279,29 @@ class TableauDeBord(QWidget):
                 else "Liste pleine : faites de la place dans la page Amis",
             )
 
+        if etat_moteur is not EtatMoteur.EN_MARCHE:
+            detail_attente = "moteur arrêté : demandes non vérifiées"
+        elif en_pause:
+            detail_attente = "en pause : elles attendent"
+        elif not acceptation_auto:
+            detail_attente = "acceptation automatique coupée"
+        else:
+            detail_attente = "acceptées à la prochaine vérification"
         self.carte_attente.afficher(
             "—"
             if instant.demandes_en_attente is None
             else str(instant.demandes_en_attente),
-            "en pause : elles attendent"
-            if en_pause
-            else "acceptées à la prochaine vérification",
+            detail_attente,
         )
+        # Les deux périodes sont nommées : la journée (journal compris) et la session.
         self.carte_acceptees.afficher(
-            str(instant.ajouts_jour), f"{instant.ajouts_session} depuis le lancement"
+            str(instant.ajouts_jour),
+            f"dont {instant.ajouts_session} depuis l'ouverture de PSN Amis",
         )
         self.carte_supprimes.afficher(
             str(instant.supprimes_jour),
-            f"aujourd'hui · {instant.retraits_jour} parti(s) d'eux-mêmes",
+            f"aujourd'hui, dont {instant.supprimes_session} depuis l'ouverture · "
+            f"{instant.retraits_jour} parti(s) d'eux-mêmes aujourd'hui",
         )
         if instant.prochaine_verification is not None and not en_pause:
             reste = max(0, int(instant.prochaine_verification - time.monotonic()))
