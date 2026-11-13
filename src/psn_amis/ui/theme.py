@@ -322,7 +322,7 @@ QPushButton#nav { text-align: left; padding: 9px 12px; border-radius: 10px;
 QPushButton#nav:hover { background: %(surface_haute)s; color: %(texte)s; }
 QPushButton#nav:checked { background: %(accent_doux)s; color: %(texte)s;
     border: 1px solid %(selection)s; }
-QPushButton#nav:focus { border: 1px solid %(accent)s; }
+QPushButton#nav:focus { border: 1px dashed %(accent)s; }
 QLabel#section_nav { color: %(tertiaire)s; font-size: 8pt; font-weight: 700;
     letter-spacing: 1px; padding: 10px 14px 4px 14px; }
 QFrame#pied_nav { background: %(surface)s; border: 1px solid %(bordure)s;

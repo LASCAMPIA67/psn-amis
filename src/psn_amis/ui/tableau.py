@@ -116,22 +116,15 @@ class TableauDeBord(QWidget):
         grille = QGridLayout()
         grille.setHorizontalSpacing(14)
         grille.setVerticalSpacing(14)
-        grille.addWidget(etat, 0, 0, 1, 2)
-        grille.addWidget(capacite, 0, 2, 1, 2)
-        for colonne, carte in enumerate(
-            (
-                self.carte_attente,
-                self.carte_acceptees,
-                self.carte_supprimes,
-                self.carte_synchro,
-            )
-        ):
-            grille.addWidget(carte, 1, colonne)
-        grille.addWidget(recents, 2, 0, 1, 2)
-        grille.addWidget(activite, 2, 2, 1, 2)
-        grille.setRowStretch(2, 1)
-        for colonne in range(4):
-            grille.setColumnStretch(colonne, 1)
+        self._grille = grille
+        self._cartes = {
+            "etat": etat,
+            "capacite": capacite,
+            "recents": recents,
+            "activite": activite,
+        }
+        self._etroit: bool | None = None
+        self._disposer(etroit=False)
 
         contenu = QWidget()
         contenu.setObjectName("page")
@@ -150,6 +143,51 @@ class TableauDeBord(QWidget):
         self._evenements: deque[Message] = deque(maxlen=8)
         self._activite_a_jour = False
         self._avertissements_actuels: tuple[tuple[str, str], ...] = ()
+
+    # Largeur en dessous de laquelle les cartes passent sur deux colonnes.
+    LARGEUR_ETROITE = 900
+
+    def _disposer(self, etroit: bool) -> None:
+        """Grille large (4 colonnes) ou étroite (2 colonnes, cartes empilées)."""
+        if etroit == self._etroit:
+            return
+        self._etroit = etroit
+        grille = self._grille
+        statistiques = (
+            self.carte_attente,
+            self.carte_acceptees,
+            self.carte_supprimes,
+            self.carte_synchro,
+        )
+        for widget in (*self._cartes.values(), *statistiques):
+            grille.removeWidget(widget)
+        for rang in range(8):
+            grille.setRowStretch(rang, 0)
+        if etroit:
+            grille.addWidget(self._cartes["etat"], 0, 0, 1, 2)
+            grille.addWidget(self._cartes["capacite"], 1, 0, 1, 2)
+            for rang, carte in enumerate(statistiques):
+                grille.addWidget(carte, 2 + rang // 2, rang % 2)
+            grille.addWidget(self._cartes["recents"], 4, 0, 1, 2)
+            grille.addWidget(self._cartes["activite"], 5, 0, 1, 2)
+            colonnes = 2
+        else:
+            grille.addWidget(self._cartes["etat"], 0, 0, 1, 2)
+            grille.addWidget(self._cartes["capacite"], 0, 2, 1, 2)
+            for colonne, carte in enumerate(statistiques):
+                grille.addWidget(carte, 1, colonne)
+            grille.addWidget(self._cartes["recents"], 2, 0, 1, 2)
+            grille.addWidget(self._cartes["activite"], 2, 2, 1, 2)
+            grille.setRowStretch(2, 1)
+            colonnes = 4
+        for colonne in range(4):
+            grille.setColumnStretch(colonne, 1 if colonne < colonnes else 0)
+        for carte in (self._cartes["recents"], self._cartes["activite"]):
+            carte.setMinimumHeight(220 if etroit else 0)
+
+    def resizeEvent(self, evenement) -> None:
+        super().resizeEvent(evenement)
+        self._disposer(self.width() < self.LARGEUR_ETROITE)
 
     def changer_palette(self, palette: Palette) -> None:
         self._palette = palette

@@ -26,8 +26,9 @@ PAGES = ("tableau-de-bord", "activite", "amis", "demandes", "parametres", "a-pro
 def main() -> int:
     parametres = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parametres.add_argument("--sortie", type=Path, default=RACINE / "captures")
-    parametres.add_argument("--theme", default="sombre")
+    parametres.add_argument("--theme", default="graphite")
     parametres.add_argument("--attente", type=float, default=8.0)
+    parametres.add_argument("--taille", default="1280x800", help="largeur x hauteur")
     choix = parametres.parse_args()
 
     # Données de démonstration dans un dossier neuf, effacé à la fin.
@@ -55,7 +56,7 @@ def main() -> int:
     moteur.configurer_journal(ecran=False, fichier=True)
     moteur.journal.addHandler(VersInterface(pont))
     controleur = Controleur(moteur.Suivi(), moteur.FICHIER_REGLAGES, donnees, reglages)
-    application.setStyleSheet(theme.feuille_de_style(choix.theme))
+    theme.appliquer(application, choix.theme)
     fenetre = Fenetre(
         controleur,
         pont,
@@ -63,7 +64,8 @@ def main() -> int:
         lambda: None,
         ["Mode démonstration : faux compte, aucune connexion à Sony."],
     )
-    fenetre.resize(1280, 800)
+    largeur, hauteur = (int(v) for v in choix.taille.lower().split("x"))
+    fenetre.resize(largeur, hauteur)
     fenetre.show()
     controleur.demarrer()
 

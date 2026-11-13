@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGridLayout,
-    QHBoxLayout,
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
@@ -67,6 +66,8 @@ LIBELLES_CHOIX = {
 class ApercuTheme(QAbstractButton):
     """Miniature d'un thème : navigation, carte, texte et bouton d'accent."""
 
+    LARGEUR = 200
+
     def __init__(self, cle: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.cle = cle
@@ -77,7 +78,7 @@ class ApercuTheme(QAbstractButton):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
     def sizeHint(self) -> QSize:
-        return QSize(200, 150)
+        return QSize(self.LARGEUR, 150)
 
     def _miniature(self, peintre: QPainter, zone: QRectF, cle: str) -> None:
         p = theme.PALETTES[cle]
@@ -180,14 +181,36 @@ class GalerieThemes(QWidget):
         grille = QGridLayout(self)
         grille.setContentsMargins(0, 0, 0, 0)
         grille.setSpacing(12)
-        for rang, cle in enumerate(theme.ORDRE):
+        self._grille = grille
+        self._colonnes = 0
+        for cle in theme.ORDRE:
             apercu = ApercuTheme(cle)
             apercu.setFixedSize(apercu.sizeHint())
             self._groupe.addButton(apercu)
             self.apercus[cle] = apercu
             apercu.clicked.connect(lambda _=False, c=cle: self._choisi(c))
-            grille.addWidget(apercu, rang // 4, rang % 4)
-        grille.setColumnStretch(4, 1)
+        self._placer(4)
+
+    def _placer(self, colonnes: int) -> None:
+        """Les aperçus sur autant de colonnes que la largeur le permet."""
+        if colonnes == self._colonnes:
+            return
+        self._colonnes = colonnes
+        for apercu in self.apercus.values():
+            self._grille.removeWidget(apercu)
+        for rang, apercu in enumerate(self.apercus.values()):
+            self._grille.addWidget(apercu, rang // colonnes, rang % colonnes)
+        for colonne in range(len(self.apercus) + 1):
+            self._grille.setColumnStretch(colonne, 1 if colonne == colonnes else 0)
+
+    def resizeEvent(self, evenement) -> None:
+        super().resizeEvent(evenement)
+        largeur = ApercuTheme.LARGEUR + 12
+        self._placer(max(1, min(4, (self.width() + 12) // largeur)))
+
+    def minimumSizeHint(self) -> QSize:
+        apercu = next(iter(self.apercus.values()))
+        return QSize(apercu.width(), super().minimumSizeHint().height())
 
     def valeur(self) -> str:
         for cle, apercu in self.apercus.items():
@@ -284,13 +307,11 @@ class PageReglages(QWidget):
         exporter = composants.bouton("Exporter…", "exporter")
         exporter.setToolTip("Les exports ne contiennent jamais le code npsso")
         exporter.clicked.connect(self.exporter)
-        boutons = QHBoxLayout()
-        for bouton in (enregistrer, annuler, defaut, importer, exporter):
-            boutons.addWidget(bouton)
-        boutons.addStretch(1)
+        boutons = composants.RangeeAdaptative(
+            enregistrer, annuler, defaut, importer, exporter
+        )
 
-        compte = QHBoxLayout()
-        compte.setSpacing(8)
+        boutons_compte = []
         for libelle, cle, icone_nom, genre, aide in (
             (
                 "Changer le code npsso…",
@@ -325,16 +346,16 @@ class PageReglages(QWidget):
                 bouton = composants.bouton(
                     libelle, icone_nom, genre, aide, actions[cle]
                 )
-                compte.addWidget(bouton)
-        compte.addStretch(1)
+                boutons_compte.append(bouton)
+        compte = composants.RangeeAdaptative(*boutons_compte)
 
         disposition = QVBoxLayout(self)
         disposition.setContentsMargins(0, 0, 0, 0)
         disposition.setSpacing(12)
-        disposition.addLayout(compte)
+        disposition.addWidget(compte)
         disposition.addWidget(onglets, 1)
         disposition.addWidget(self.message)
-        disposition.addLayout(boutons)
+        disposition.addWidget(boutons)
         self.recharger()
 
     # ─── Apparence ───

@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from psn_amis import moteur, reglages
 from psn_amis.reglages import Reglages
+from psn_amis.ui import composants
 from psn_amis.ui import theme as theme_ui
 from psn_amis.ui.apropos import AVERTISSEMENT
 from psn_amis.ui.commun import Tache, etiquette
@@ -191,18 +192,41 @@ class Assistant(QWizard):
         self._appliquer = appliquer
 
         bienvenue = QWizardPage()
-        bienvenue.setTitle("Bienvenue")
-        QVBoxLayout(bienvenue).addWidget(
+        bienvenue.setTitle("Bienvenue dans PSN Amis")
+        disposition_bienvenue = QVBoxLayout(bienvenue)
+        disposition_bienvenue.setSpacing(14)
+        disposition_bienvenue.addWidget(
             etiquette(
                 "PSN Amis accepte automatiquement les demandes d'amis que reçoit votre "
                 "compte PlayStation, et vous aide à garder de la place dans votre liste "
-                "d'amis (2000 au maximum chez Sony).\n\n"
-                "Il vérifie les demandes toutes les 15 secondes, les accepte une par "
-                "une, et vous montre tout ce qu'il fait dans sa console. Il ne supprime "
-                "jamais un ami sans que vous l'ayez demandé, et jamais un ami protégé.",
+                "d'amis (2000 au maximum chez Sony).",
                 retour_ligne=True,
             )
         )
+        p = composants.palette_courante()
+        for icone_nom, titre, texte in (
+            (
+                "demandes",
+                "Acceptation automatique",
+                "Les demandes sont vérifiées toutes les 15 secondes et acceptées une par "
+                "une.",
+            ),
+            (
+                "bouclier",
+                "Vous gardez la main",
+                "Aucun ami n'est supprimé sans votre accord, et jamais un ami protégé.",
+            ),
+            (
+                "activite",
+                "Tout est visible",
+                "Chaque action apparaît dans l'activité, avec son heure.",
+            ),
+        ):
+            carte = composants.Carte(titre, icone_nom)
+            carte.ajouter(etiquette(texte, "discret", retour_ligne=True))
+            carte.changer_palette(p)
+            disposition_bienvenue.addWidget(carte)
+        disposition_bienvenue.addStretch(1)
         self.saisie = SaisieCode()
         configuration = QWizardPage()
         configuration.setTitle("Premiers réglages")

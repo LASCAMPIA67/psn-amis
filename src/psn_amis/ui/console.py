@@ -75,12 +75,15 @@ class Console(QWidget):
         exporter.clicked.connect(self.exporter)
 
         barre = QHBoxLayout()
+        barre.setSpacing(8)
         barre.addWidget(self.recherche, 3)
         barre.addWidget(self.filtre, 2)
-        barre.addWidget(self.details)
-        barre.addWidget(copier)
-        barre.addWidget(effacer)
-        barre.addWidget(exporter)
+        outils = QHBoxLayout()
+        outils.setSpacing(6)
+        outils.addWidget(self.details)
+        outils.addStretch(1)
+        for b in (copier, effacer, exporter):
+            outils.addWidget(b)
 
         self.texte = QPlainTextEdit()
         self.texte.setReadOnly(True)
@@ -94,6 +97,7 @@ class Console(QWidget):
         disposition = QVBoxLayout(self)
         disposition.setContentsMargins(0, 0, 0, 0)
         disposition.addLayout(barre)
+        disposition.addLayout(outils)
         disposition.addWidget(self.texte)
         QShortcut(QKeySequence.StandardKey.Find, self, self.recherche.setFocus)
 

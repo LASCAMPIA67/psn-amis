@@ -279,9 +279,9 @@ class Reglages:
         "systeme",
         APPLICATION,
         "Animations",
-        "systeme : suit le réglage « Effets d'animation » de Windows. activees : "
-        "transitions et effets discrets. coupees : aucune animation (affichage "
-        "instantané).",
+        "Comme Windows : suit le réglage « Effets d'animation » de Windows "
+        "(Accessibilité › Effets visuels). Activées : transitions et effets discrets. "
+        "Coupées : aucune animation, affichage instantané.",
         choix=ANIMATIONS,
     )
     verifier_mises_a_jour: bool = _reglage(

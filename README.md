@@ -132,7 +132,9 @@ Attention : c'est différent de la **liste blanche** des demandes, qui choisit s
 
 ## Paramètres
 
-![La page Paramètres : chaque réglage avec son explication](docs/images/fenetre-parametres.png)
+![La page Paramètres, onglet Apparence : aperçus des thèmes et réglage des animations](docs/images/fenetre-parametres.png)
+
+**Apparence** : choisis parmi sept thèmes complets d'un clic sur leur aperçu (Graphite Premium, Bleu Minuit, Émeraude, Améthyste, Clair Élégant, Contraste daltonien, ou Système pour suivre le mode clair/sombre de Windows). Le changement est immédiat et gardé. Les animations, discrètes, peuvent suivre le réglage « Effets d'animation » de Windows, rester activées ou être coupées.
 
 Tout se règle dans la page **Paramètres** : chaque réglage a une explication, des limites, et indique s'il s'applique tout de suite ou après un redémarrage. Rien n'est enregistré tant qu'une valeur est invalide. Tu peux **exporter** et **importer** tes réglages (jamais le code npsso), ou revenir aux **valeurs par défaut**.
 

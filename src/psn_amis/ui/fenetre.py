@@ -165,6 +165,8 @@ class Fenetre(QMainWindow):
             bouton.setToolTip(f"{nom} ({raccourci})")
             bouton.setAccessibleName(nom)
             bouton.setIconSize(QSize(18, 18))
+            # Focus au clavier seulement : un clic ne laisse pas de cadre en plus.
+            bouton.setFocusPolicy(Qt.FocusPolicy.TabFocus)
             self._groupe_nav.addButton(bouton, rang)
             self._boutons_nav.append(bouton)
             nav.addWidget(bouton)
@@ -250,6 +252,9 @@ class Fenetre(QMainWindow):
             self._schema_windows_change
         )
         self.aller(0)
+        # Focus de départ sur le contenu (et non sur un bouton de navigation).
+        self.pages.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.pages.setFocus()
         self.minuterie = QTimer(self)
         self.minuterie.setInterval(1000)
         self.minuterie.timeout.connect(self.actualiser)
@@ -365,9 +370,21 @@ class Fenetre(QMainWindow):
         if self.isVisible():
             self.notifications.afficher(niveau, titre, texte, duree_ms)
 
+    # En dessous de cette largeur, les commandes de l'en-tête n'affichent que leur
+    # icône (le libellé reste dans l'infobulle et pour les lecteurs d'écran).
+    LARGEUR_COMPACTE = 1180
+
     def resizeEvent(self, evenement) -> None:
         super().resizeEvent(evenement)
         self.notifications.replacer()
+        style = (
+            Qt.ToolButtonStyle.ToolButtonIconOnly
+            if self.width() < self.LARGEUR_COMPACTE
+            else Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        for bouton in self._boutons_actions.values():
+            if bouton.toolButtonStyle() != style:
+                bouton.setToolButtonStyle(style)
 
     def pause(self) -> None:
         self.controleur.basculer_pause()

@@ -48,6 +48,8 @@ PSN Amis checks the code with Sony, shows the connected account, and stores the 
 
 The left bar has six pages: **Tableau de bord** (dashboard), **Activité** (activity console), **Amis** (friends), **Demandes** (requests), **Paramètres** (settings) and **À propos** (about). The toolbar starts, stops, pauses (<kbd>Ctrl</kbd>+<kbd>P</kbd>), checks now (<kbd>F5</kbd>), reconnects, restarts the engine or the whole application, and quits.
 
+**Appearance** (page **Paramètres**, tab **Apparence**): seven complete themes chosen from live previews (Graphite Premium, Bleu Minuit, Émeraude, Améthyste, Clair Élégant, colour-blind contrast, or System to follow Windows light/dark mode), applied immediately and remembered; subtle animations that can follow Windows' animation setting or be turned off.
+
 **Removing friends** (page **Amis**): tick friends, or choose a number and an explicit rule (*oldest accepted by PSN Amis*, *first seen by PSN Amis*, *alphabetical*), then preview. Nothing is removed until you tick the confirmation and click **Supprimer N amis**. Removals run one at a time with a pause; the friendship is re-checked with Sony right before each one; a removal without a clear answer is marked *to check* and never blindly retried. Dates are never invented: unknown ones read « Inconnue ».
 
 **Protected friends** are never removed, by hand or by the clean-up; protection follows the account ID even if the player changes their name. This is separate from the requests *whitelist*.

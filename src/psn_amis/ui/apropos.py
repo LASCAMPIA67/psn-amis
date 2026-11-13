@@ -155,7 +155,7 @@ class PageAPropos(QWidget):
         verifier = composants.bouton("Rechercher une mise à jour", "mise_a_jour")
         verifier.setObjectName("principal")
         verifier.clicked.connect(rechercher)
-        liens = QHBoxLayout()
+        liens_boutons = []
         for libelle, adresse in (
             ("Page du projet", DEPOT),
             ("Notes de version", f"{DEPOT}/releases"),
@@ -163,15 +163,15 @@ class PageAPropos(QWidget):
         ):
             bouton = composants.bouton(libelle, "lien", "plat")
             bouton.clicked.connect(lambda _=False, a=adresse: ouvrir(a))
-            liens.addWidget(bouton)
+            liens_boutons.append(bouton)
         donnees = composants.bouton(
             "Dossier des données et du journal", "dossier", "plat"
         )
         donnees.clicked.connect(
             lambda: ouvrir(QUrl.fromLocalFile(str(dossier_donnees)).toString())
         )
-        liens.addWidget(donnees)
-        liens.addStretch(1)
+        liens_boutons.append(donnees)
+        liens = composants.RangeeAdaptative(*liens_boutons)
         disposition = QVBoxLayout(self)
         disposition.setContentsMargins(0, 0, 0, 0)
         disposition.setSpacing(12)
@@ -203,7 +203,7 @@ class PageAPropos(QWidget):
         ligne.addWidget(verifier)
         ligne.addWidget(self.etat, 1)
         disposition.addLayout(ligne)
-        disposition.addLayout(liens)
+        disposition.addWidget(liens)
         disposition.addWidget(
             etiquette(
                 f"Données : {dossier_donnees}\nBibliothèques tierces et licences : "

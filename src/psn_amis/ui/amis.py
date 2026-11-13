@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QStackedWidget,
@@ -223,24 +224,46 @@ class Apercu(QDialog):
     def __init__(self, selection: Selection, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Prévisualiser les suppressions")
-        self.resize(560, 560)
+        self.resize(640, 640)
         n = selection.supprimables
-        resume = (
-            f"Amis dans la liste : {selection.total_amis}\n"
-            f"Demandés : {selection.demandes}\n"
-            f"Protégés (exclus) : {selection.proteges}\n"
-            f"Protection incertaine (exclus) : {selection.incertains}\n"
-            f"Effectivement supprimables : {n}\n"
-            f"Critère : {selection.critere}\n"
-            f"Requêtes à Sony estimées : {selection.requetes} "
-            "(vérification puis suppression, une toutes les 3 secondes au plus)"
-        )
         disposition = QVBoxLayout(self)
-        disposition.addWidget(etiquette(resume, retour_ligne=True))
-        for avertissement in selection.avertissements:
-            disposition.addWidget(
-                etiquette(f"▲ {avertissement}", "bandeau_attention", True)
+        disposition.setContentsMargins(22, 20, 22, 18)
+        disposition.setSpacing(12)
+        disposition.addWidget(etiquette("Prévisualiser les suppressions", "titre"))
+        disposition.addWidget(
+            etiquette(
+                "Rien n'est supprimé à cette étape. Vérifiez la liste, puis confirmez.",
+                "discret",
+                retour_ligne=True,
             )
+        )
+        chiffres = QHBoxLayout()
+        chiffres.setSpacing(10)
+        for titre, valeur, icone_nom in (
+            ("Dans la liste", selection.total_amis, "amis"),
+            ("Protégés exclus", selection.proteges, "bouclier"),
+            ("Incertains exclus", selection.incertains, "alerte"),
+            ("À supprimer", n, "poubelle"),
+        ):
+            carte = composants.Statistique(titre, icone_nom)
+            carte.afficher(str(valeur))
+            if titre == "À supprimer":
+                carte.valeur.setStyleSheet(
+                    f"color: {composants.palette_courante().erreur};"
+                )
+            chiffres.addWidget(carte)
+        disposition.addLayout(chiffres)
+        disposition.addWidget(
+            etiquette(
+                f"Critère : {selection.critere}.\nRequêtes à Sony estimées : "
+                f"{selection.requetes} (vérification puis suppression, une toutes les "
+                "3 secondes au plus).",
+                "description",
+                retour_ligne=True,
+            )
+        )
+        for avertissement in selection.avertissements:
+            disposition.addWidget(Bandeau("attention", avertissement))
         liste = QListWidget()
         liste.setAccessibleName("Amis qui seraient supprimés")
         for rang, cible in enumerate(selection.cibles, start=1):
@@ -298,8 +321,14 @@ class PageAmis(QWidget):
         self.recherche.setPlaceholderText("Rechercher un pseudo ou un identifiant")
         self.recherche.setClearButtonEnabled(True)
         self.recherche.setAccessibleName("Rechercher un ami")
+        self.recherche.setMinimumWidth(100)
         self.filtre = QComboBox()
         self.filtre.addItems(FILTRES)
+        # Largeur raisonnable, même si un choix est long (fenêtre étroite).
+        self.filtre.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.filtre.setMinimumContentsLength(12)
         self.filtre.setToolTip("Filtrer la liste")
 
         self.modele = ModeleAmis()
@@ -337,10 +366,12 @@ class PageAmis(QWidget):
             aide="Protège les amis cochés contre toute suppression",
         )
         proteger.clicked.connect(self._proteger_coches)
-        deproteger = composants.bouton("Retirer la protection")
+        deproteger = composants.bouton(
+            "Déprotéger", "erreur", aide="Retire la protection des amis cochés"
+        )
         deproteger.clicked.connect(self._deproteger_coches)
         self.supprimer_coches = composants.bouton(
-            "Supprimer les cochés…",
+            "Supprimer…",
             "poubelle",
             "danger",
             "Aperçu puis confirmation : rien n'est supprimé sans votre accord",
@@ -354,14 +385,22 @@ class PageAmis(QWidget):
         barre_haut.addWidget(self.filtre, 1)
         barre_haut.addWidget(actualiser)
         barre_haut.addWidget(self.pseudos)
-        barre_coches = QHBoxLayout()
+        barre_coches = QVBoxLayout()
         barre_coches.setSpacing(6)
+        ligne_coches = QHBoxLayout()
+        ligne_coches.setSpacing(6)
         for bouton in (tout, rien):
-            barre_coches.addWidget(bouton)
-        barre_coches.addWidget(self.coches)
-        barre_coches.addStretch(1)
-        for bouton in (proteger, deproteger, self.supprimer_coches):
-            barre_coches.addWidget(bouton)
+            ligne_coches.addWidget(bouton)
+        ligne_coches.addWidget(self.coches)
+        ligne_coches.addStretch(1)
+        ligne_actions = QHBoxLayout()
+        ligne_actions.setSpacing(6)
+        for bouton in (proteger, deproteger):
+            ligne_actions.addWidget(bouton)
+        ligne_actions.addStretch(1)
+        ligne_actions.addWidget(self.supprimer_coches)
+        barre_coches.addLayout(ligne_coches)
+        barre_coches.addLayout(ligne_actions)
 
         # Sélection par nombre.
         self.nombre = QSpinBox()
@@ -369,6 +408,10 @@ class PageAmis(QWidget):
         self.nombre.setValue(50)
         self.nombre.setAccessibleName("Nombre d'amis à sélectionner")
         self.critere = QComboBox()
+        self.critere.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.critere.setMinimumContentsLength(10)
         for critere, nom in NOMS_CRITERES.items():
             self.critere.addItem(nom, critere)
             self.critere.setItemData(
@@ -441,9 +484,14 @@ class PageAmis(QWidget):
         ligne_ajout.addWidget(ajouter)
         disposition_proteges.addLayout(ligne_ajout)
         disposition_proteges.addWidget(self.liste_proteges, 1)
+        ligne_retirer = QHBoxLayout()
+        ligne_retirer.addWidget(retirer)
+        ligne_retirer.addStretch(1)
+        disposition_proteges.addLayout(ligne_retirer)
         ligne_fichiers = QHBoxLayout()
-        for bouton in (retirer, importer, exporter):
+        for bouton in (importer, exporter):
             ligne_fichiers.addWidget(bouton)
+        ligne_fichiers.addStretch(1)
         disposition_proteges.addLayout(ligne_fichiers)
 
         gauche = QWidget()
@@ -468,7 +516,7 @@ class PageAmis(QWidget):
         disposition_droite = QVBoxLayout(droite)
         disposition_droite.setContentsMargins(0, 0, 0, 0)
         disposition_droite.setSpacing(10)
-        droite.setMinimumWidth(320)
+        droite.setMinimumWidth(360)
         disposition_droite.addWidget(groupe_proteges, 1)
         disposition_droite.addWidget(groupe_operation, 1)
         separateur = QSplitter()
@@ -478,13 +526,36 @@ class PageAmis(QWidget):
         separateur.setStretchFactor(1, 2)
 
         separateur.setChildrenCollapsible(False)
+        self.separateur = separateur
+        contenu = QWidget()
+        contenu.setObjectName("page")
+        self._contenu = contenu
+        disposition_contenu = QVBoxLayout(contenu)
+        disposition_contenu.setContentsMargins(0, 0, 4, 0)
+        disposition_contenu.setSpacing(10)
+        disposition_contenu.addWidget(self.entete)
+        disposition_contenu.addLayout(self.bandeaux)
+        disposition_contenu.addWidget(separateur, 1)
+        defilement = QScrollArea()
+        defilement.setWidgetResizable(True)
+        defilement.setWidget(contenu)
         disposition = QVBoxLayout(self)
         disposition.setContentsMargins(0, 0, 0, 0)
-        disposition.setSpacing(10)
-        disposition.addWidget(self.entete)
-        disposition.addLayout(self.bandeaux)
-        disposition.addWidget(separateur, 1)
+        disposition.addWidget(defilement)
         self._bandeaux_actuels: tuple = ()
+
+    # Largeur en dessous de laquelle les deux panneaux s'empilent.
+    LARGEUR_EMPILEE = 1000
+
+    def resizeEvent(self, evenement) -> None:
+        super().resizeEvent(evenement)
+        empile = self.width() < self.LARGEUR_EMPILEE
+        orientation = Qt.Orientation.Vertical if empile else Qt.Orientation.Horizontal
+        if self.separateur.orientation() != orientation:
+            self.separateur.setOrientation(orientation)
+        self.pseudos.setText("Pseudos" if empile else "Récupérer les pseudos")
+        # Empilés : assez de hauteur pour la liste, avec défilement si besoin.
+        self._contenu.setMinimumHeight(980 if empile else 0)
 
     # ─── Mise à jour ───
 

@@ -23,7 +23,9 @@ PSN Amis devient une application Windows : un installateur, une fenêtre, et la 
 - **Paramètres modifiables dans l'application**, avec description, bornes, validation et indication de l'effet (immédiat, redémarrage du moteur ou de l'application) ; import, export, valeurs par défaut ; reprise des données d'une ancienne version.
 - **Assistant de première utilisation** : présentation, avertissement sur l'API non officielle, connexion du compte avec vérification auprès de Sony, premiers réglages.
 - **Mises à jour** : vérification au lancement (si autorisée) ou à la demande, fenêtre « Mise à jour disponible » avec les nouveautés, téléchargement de l'installateur officiel vérifié (HTTPS, adresses GitHub du projet, taille, empreinte SHA-256), signature Authenticode contrôlée, puis installation et relance automatiques.
-- **Thème clair**, en plus des thèmes sombre, doux et daltonien.
+- **Apparence premium** : navigation latérale avec icônes, en-tête de page, cartes, pastilles d'état, interrupteurs, bandeaux, états vides explicatifs et notifications temporaires ; icônes vectorielles dessinées pour le projet, nettes à toutes les mises à l'échelle ; mise en page adaptée aux petites fenêtres (aucun bouton tronqué).
+- **Six thèmes complets** : Graphite Premium, Bleu Minuit, Émeraude, Améthyste, Clair Élégant, Contraste daltonien, et Système (suit le mode clair ou sombre de Windows), avec aperçus dans les paramètres ; appliqués immédiatement et gardés au redémarrage ; contrastes conformes WCAG AA.
+- **Animations discrètes** (transitions de pages, interrupteurs, notifications), réglables : comme Windows, activées ou coupées.
 - **Lancement avec Windows**, démarrage réduit, icône dans la zone de notification et choix du comportement de la croix (application installée).
 - **Mode démonstration** `--demo` : faux compte, aucune connexion à Sony.
 - Intégration continue : compilation de l'application, démarrage réel des exécutables, construction et test de l'installateur ; publication automatique de l'installateur et de `SHA256SUMS.txt` sur une étiquette `vX.Y.Z`.
@@ -34,6 +36,7 @@ PSN Amis devient une application Windows : un installateur, une fenêtre, et la 
 - `reglages.toml` est désormais écrit par l'application (écriture atomique, ancienne version gardée dans `reglages.toml.bak`) et porte un numéro de format ; `reglages.exemple.toml` disparaît : le fichier créé explique lui-même chaque réglage.
 - Le code est rangé dans le paquet `src/psn_amis/` ; la version est définie dans `src/psn_amis/__init__.py`.
 - Le journal garde un nombre d'archives réglable (`journaux_archives`).
+- Thèmes renommés : « sombre » devient Graphite Premium et « doux » Bleu Minuit (repris automatiquement, format de `reglages.toml` passé à 3 avec copie de l'ancien fichier).
 - Les demandes d'ami proche venues d'un ami existant sont signalées avec un message plus clair.
 
 ### Sécurité

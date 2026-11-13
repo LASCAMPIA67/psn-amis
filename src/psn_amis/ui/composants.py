@@ -391,6 +391,8 @@ class Bandeau(QFrame):
         super().__init__(parent)
         self.niveau = niveau
         self.setObjectName(f"bandeau_{niveau}")
+        # Toujours à la hauteur de son texte, jamais étiré.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         disposition = QHBoxLayout(self)
         disposition.setContentsMargins(12, 9, 12, 9)
         disposition.setSpacing(10)
@@ -635,3 +637,60 @@ def dessin_arrondi(rect: QRectF, rayon: float) -> QPainterPath:
     chemin = QPainterPath()
     chemin.addRoundedRect(rect, rayon, rayon)
     return chemin
+
+
+class RangeeAdaptative(QWidget):
+    """Rangée de boutons qui passe à la ligne quand la fenêtre est étroite : aucun
+    bouton n'est jamais tronqué ni caché."""
+
+    def __init__(self, *boutons: QWidget, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        from PySide6.QtWidgets import QGridLayout
+
+        self._boutons = list(boutons)
+        self._grille = QGridLayout(self)
+        self._grille.setContentsMargins(0, 0, 0, 0)
+        self._grille.setHorizontalSpacing(8)
+        self._grille.setVerticalSpacing(8)
+        self._colonnes = 0
+        self._placer(len(self._boutons))
+
+    def _placer(self, colonnes: int) -> None:
+        if colonnes == self._colonnes:
+            return
+        self._colonnes = colonnes
+        for bouton in self._boutons:
+            self._grille.removeWidget(bouton)
+        for rang, bouton in enumerate(self._boutons):
+            self._grille.addWidget(bouton, rang // colonnes, rang % colonnes)
+        for colonne in range(len(self._boutons) + 1):
+            self._grille.setColumnStretch(colonne, 0)
+        self._grille.setColumnStretch(colonnes, 1)
+
+    def resizeEvent(self, evenement) -> None:
+        super().resizeEvent(evenement)
+        largeur = self.width()
+        largeurs = [
+            max(b.minimumSizeHint().width(), b.sizeHint().width())
+            for b in self._boutons
+        ]
+        colonnes = len(self._boutons)
+        while colonnes > 1:
+            # Chaque colonne prend la largeur de son bouton le plus large.
+            besoin = sum(
+                max(largeurs[colonne::colonnes]) for colonne in range(colonnes)
+            ) + 8 * (colonnes - 1)
+            if besoin <= largeur:
+                break
+            colonnes -= 1
+        self._placer(colonnes)
+
+    def minimumSizeHint(self) -> QSize:
+        plus_large = max(
+            (
+                max(b.minimumSizeHint().width(), b.sizeHint().width())
+                for b in self._boutons
+            ),
+            default=0,
+        )
+        return QSize(plus_large, super().minimumSizeHint().height())

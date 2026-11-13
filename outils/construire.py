@@ -151,6 +151,26 @@ def pyinstaller() -> None:
         raise SystemExit("PyInstaller a échoué.")
 
 
+RESSOURCES = (
+    "_internal/psn_amis/ressources/icone.ico",
+    "_internal/PySide6/QtSvg.pyd",
+    "_internal/PySide6/Qt6Svg.dll",
+    "_internal/PySide6/plugins/platforms/qwindows.dll",
+    "_internal/PySide6/plugins/imageformats/qico.dll",
+    "_internal/PySide6/translations/qtbase_fr.qm",
+)
+
+
+def verifier_ressources() -> None:
+    """Les ressources visuelles doivent être dans l'application autonome."""
+    manquantes = [r for r in RESSOURCES if not (APPLICATION / r).is_file()]
+    if manquantes:
+        raise SystemExit(f"Ressources absentes de l'application : {manquantes}")
+    print(
+        f"✔ Ressources présentes ({len(RESSOURCES)}) : icônes SVG, icône, Qt, traductions."
+    )
+
+
 def verifier_executables(numero: str) -> None:
     """Le programme compilé doit vraiment démarrer, pas seulement exister.
 
@@ -277,6 +297,7 @@ def main() -> int:
     ecrire_version_windows(numero)
     ecrire_licences()
     pyinstaller()
+    verifier_ressources()
     if not choix.sans_verification:
         verifier_executables(numero)
     if choix.sans_installateur:
