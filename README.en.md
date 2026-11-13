@@ -13,7 +13,7 @@
 
 ![The PSN Amis window: status, connected account, friend count and list capacity, pending requests, accepted requests, removed friends, synchronisation and latest additions](docs/images/fenetre-tableau-de-bord.png)
 
-**[⬇ Download PSN Amis 3.0.0](https://github.com/LASCAMPIA67/psn-amis/releases/tag/v3.0.0)** (`PSN-Amis-Setup-3.0.0.exe`, Windows 10 and 11, 64-bit). This is a **pre-release**: the last manual checks are still in progress.
+**[⬇ Download the latest release](https://github.com/LASCAMPIA67/psn-amis/releases/latest)** (`PSN-Amis-Setup-x.y.z.exe`, Windows 10 and 11, 64-bit)
 
 > PSN Amis is an independent project, **not affiliated with Sony Interactive Entertainment or PlayStation**. It relies on an unofficial PlayStation API: read [Limits and disclaimer](#limits-and-disclaimer) first.
 
@@ -28,7 +28,7 @@
 
 ## Installation
 
-1. Download **`PSN-Amis-Setup-x.y.z.exe`** from the [releases page](https://github.com/LASCAMPIA67/psn-amis/releases).
+1. Download **`PSN-Amis-Setup-x.y.z.exe`** from the [releases page](https://github.com/LASCAMPIA67/psn-amis/releases/latest).
 2. Run it. Windows SmartScreen may warn you because the installer is not yet signed with a paid certificate: make sure it comes from this GitHub page, then choose **More info › Run anyway**. Never disable SmartScreen or your antivirus.
 3. Pick the folder (default: `%LOCALAPPDATA%\Programs\PSN Amis`) and, if you like, a Desktop shortcut.
 
