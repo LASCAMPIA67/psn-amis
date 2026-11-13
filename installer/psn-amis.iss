@@ -99,6 +99,10 @@ const
 var
   Niveau: Integer;
   EffacerCode: Boolean;
+  { Fenêtre de choix du niveau : la case du code suit le niveau choisi. }
+  ChoixComplet: TNewRadioButton;
+  CaseCode: TNewCheckBox;
+  CodeChoisi: Boolean;
 
 function Relancer: Boolean;
 begin
@@ -231,6 +235,29 @@ begin
   Result.Caption := Contenu;
 end;
 
+{ Niveau 3 : le code npsso est toujours retiré, la case est donc cochée et grisée.
+  Niveaux 1 et 2 : la case redevient libre, avec le dernier choix de l'utilisateur. }
+procedure SynchroniserCaseCode(Sender: TObject);
+begin
+  if ChoixComplet.Checked then
+  begin
+    CaseCode.Enabled := False;
+    CaseCode.Checked := True;
+  end
+  else
+  begin
+    CaseCode.Enabled := True;
+    CaseCode.Checked := CodeChoisi;
+  end;
+end;
+
+procedure CaseCodeCliquee(Sender: TObject);
+begin
+  { Seul un clic de l'utilisateur (case active) compte comme son choix. }
+  if CaseCode.Enabled then
+    CodeChoisi := CaseCode.Checked;
+end;
+
 function ChoisirNiveau: Boolean;
 var
   Fenetre: TSetupForm;
@@ -258,6 +285,14 @@ begin
     Code.Caption := 'Retirer aussi le code npsso enregistré (compte PSN connecté)';
     Texte(Fenetre, ScaleY(292), 'Aucun fichier n''appartenant pas à PSN Amis n''est supprimé. Python, uv et les autres programmes ne sont jamais touchés.');
     Standard.Checked := True;
+    CodeChoisi := False;
+    ChoixComplet := Complete;
+    CaseCode := Code;
+    Code.OnClick := @CaseCodeCliquee;
+    Standard.OnClick := @SynchroniserCaseCode;
+    AvecDonnees.OnClick := @SynchroniserCaseCode;
+    Complete.OnClick := @SynchroniserCaseCode;
+    SynchroniserCaseCode(nil);
 
     Ok := TNewButton.Create(Fenetre);
     Ok.Parent := Fenetre;
