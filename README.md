@@ -219,7 +219,9 @@ Depuis le code source, `Lancer PSN Amis.cmd` installe l'environnement puis ouvre
 | `src/psn_amis/simulation.py`, `demo.py` | faux Sony pour les tests et le mode démonstration |
 | `installer/` | recette PyInstaller et script Inno Setup |
 | `tests/` | tests pytest : faux Sony, faux coffre, fenêtre hors écran |
-| `outils/` | construction, test d'installation, captures, version, notes de version |
+| `outils/` | construction, test d'installation, captures, version, notes de version, export CSV du journal |
+| `Lancer PSN Amis.cmd` | lance PSN Amis depuis le code source (installe l'environnement la première fois) |
+| `Raccourcis PSN Amis.cmd` | raccourcis Bureau et démarrage de Windows pour le code source (l'application installée a les siens) |
 
 Les vérifications tournent sur GitHub à chaque envoi (`verification.yml`), y compris la compilation et le test de l'installateur ; une étiquette `vX.Y.Z` publie la version avec son installateur (`publication.yml`). Le détail est dans le [guide de contribution](CONTRIBUTING.md).
 

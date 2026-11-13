@@ -125,6 +125,7 @@ QCheckBox:focus {{ border: 1px solid {p.accent}; }}
 QPushButton:disabled, QToolButton:disabled {{ color: {p.discret}; }}
 QPushButton#principal {{ background: {p.accent}; color: {p.fond}; font-weight: 600; }}
 QPushButton#danger {{ background: {p.erreur}; color: {p.fond}; font-weight: 600; }}
+QPushButton#principal:disabled {{ background: {p.surface_haute}; color: {p.discret}; }}
 QPushButton#danger:disabled {{ background: {p.surface_haute}; color: {p.discret}; }}
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {{
     background: {p.surface}; border: 1px solid {p.bordure}; border-radius: 6px;
