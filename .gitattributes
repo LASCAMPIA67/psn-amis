@@ -6,3 +6,4 @@
 
 # Images : jamais modifiées.
 *.png binary
+*.ico binary

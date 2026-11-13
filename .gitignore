@@ -10,6 +10,19 @@ journal.txt.*
 # Verrou qui empêche de lancer le script deux fois
 accepter_amis.lock
 
+# Réglages personnels (copiés de reglages.exemple.toml au premier lancement)
+reglages.toml
+
+# Amis connus au dernier arrêt (identifiants de comptes PSN)
+amis.json
+
+# Détails techniques écrits avec --diagnostic
+diagnostic.txt
+diagnostic.txt.*
+
+# Exports du journal en tableur (contiennent des pseudos de joueurs)
+export-*.csv
+
 # Environnement Python propre au projet (recréé par « uv sync »)
 .venv/
 __pycache__/
