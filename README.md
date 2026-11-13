@@ -78,7 +78,7 @@ PSN Amis vérifie le code auprès de Sony, affiche le pseudo du compte connecté
 | Reconnecter | <kbd>Ctrl</kbd>+<kbd>R</kbd> | rouvre la connexion à Sony |
 | Redémarrer le moteur | <kbd>Ctrl</kbd>+<kbd>Maj</kbd>+<kbd>R</kbd> | arrête proprement puis relance, sans fermer la fenêtre |
 | Redémarrer l'application | | ferme PSN Amis proprement et le rouvre |
-| Pages | <kbd>Ctrl</kbd>+<kbd>1</kbd> à <kbd>6</kbd> | change de page |
+| Pages | <kbd>Ctrl</kbd>+<kbd>1</kbd> à <kbd>6</kbd> (sur un clavier AZERTY : <kbd>Ctrl</kbd> + <kbd>&</kbd> <kbd>é</kbd> <kbd>"</kbd> <kbd>'</kbd> <kbd>(</kbd> <kbd>-</kbd>) | change de page |
 | Quitter | <kbd>Ctrl</kbd>+<kbd>Q</kbd> | ferme PSN Amis |
 
 La **console d'activité** affiche chaque événement avec son heure, un symbole et une couleur (jamais la couleur seule) : `+` demande acceptée, `−` ami parti, `✂` suppression, `▲` avertissement, `✖` erreur. Tu peux y chercher (<kbd>Ctrl</kbd>+<kbd>F</kbd>), filtrer, copier, exporter, ou effacer l'affichage : le journal enregistré, lui, n'est jamais effacé. Quand tu remontes lire d'anciens messages, l'affichage ne saute plus en bas.
@@ -107,7 +107,7 @@ Les suppressions passent ensuite une par une, avec une pause entre chacune : PSN
 
 ### Le nettoyage automatique
 
-Désactivé au départ. Dans **Paramètres › Nettoyage automatique** :
+Désactivé au départ. Dans **Paramètres › Nettoyage** :
 
 - **assisté** : quand ta liste atteint le seuil (1 900 par exemple), PSN Amis te propose une sélection pour revenir à la cible (1 700), à confirmer ;
 - **automatique** : il supprime lui-même, dans des limites prudentes (25 par nettoyage, 100 par jour, une heure entre deux nettoyages, plage horaire au choix).
