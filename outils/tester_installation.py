@@ -228,7 +228,8 @@ def main() -> int:
 
         print("4. Désinstallation standard (niveau 1)")
         # Comme l'option « Lancer PSN Amis avec Windows » de l'application installée.
-        with winreg.OpenKey(
+        # La clé Run peut manquer sur une session neuve (machine de la CI).
+        with winreg.CreateKeyEx(
             winreg.HKEY_CURRENT_USER, RUN, 0, winreg.KEY_SET_VALUE
         ) as cle:
             winreg.SetValueEx(cle, "PSN Amis", 0, winreg.REG_SZ, f'"{exe}" --reduit')

@@ -53,10 +53,12 @@ def demarrage_avec_windows(actif: bool) -> bool:
     import winreg
 
     try:
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE
-        ) as cle:
-            if actif:
+        if actif:
+            # Créée au besoin : sur une session Windows neuve, la clé Run peut
+            # ne pas encore exister.
+            with winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE
+            ) as cle:
                 winreg.SetValueEx(
                     cle,
                     NOM_RUN,
@@ -64,9 +66,17 @@ def demarrage_avec_windows(actif: bool) -> bool:
                     winreg.REG_SZ,
                     _texte_commande(commande_de_lancement("--reduit")),
                 )
-            else:
-                with contextlib.suppress(FileNotFoundError):
-                    winreg.DeleteValue(cle, NOM_RUN)
+        else:
+            with (
+                winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE
+                ) as cle,
+                contextlib.suppress(FileNotFoundError),
+            ):
+                winreg.DeleteValue(cle, NOM_RUN)
+    except FileNotFoundError:
+        # Pas de clé Run : PSN Amis n'y figure donc pas, rien à retirer.
+        return not actif
     except OSError:
         return False
     return True
