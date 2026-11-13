@@ -14,7 +14,7 @@ import requests
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtCore import QEvent, QEventLoop, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QDialog
 
 from psn_amis import moteur, reglages
@@ -82,6 +82,10 @@ def fenetre(application, sony, dossier, monkeypatch):
     fenetre._quitter_pour_de_bon = True
     fenetre.close()
     moteur.journal.removeHandler(gestionnaire)
+    # Détruite pour de bon : sinon les fenêtres des tests précédents s'accumulent
+    # (minuteurs actifs, repeintes à chaque changement de thème) et tout ralentit.
+    fenetre.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 def test_ouverture_navigation_et_etats(fenetre):

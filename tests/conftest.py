@@ -18,6 +18,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pytest
 import requests
@@ -26,6 +27,17 @@ from psn_amis import coffre, moteur, notifications, reglages, tableau_de_bord
 
 # Un code au bon format, inventé pour les tests.
 FAUX_CODE = ("Ab3" * 22)[:64]
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Rendu hors écran (CI) : sans dossier de polices, Qt prend une police de
+    secours aux dimensions sans rapport avec celles de Windows, et les mesures de
+    mise en page (boutons tronqués, largeurs) n'ont plus de sens. On lui donne les
+    polices de Windows, celles qu'utilise la vraie fenêtre (avant toute création de
+    l'application Qt)."""
+    polices = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    if polices.is_dir():
+        os.environ.setdefault("QT_QPA_FONTDIR", str(polices))
 
 
 def attendre_que(condition: Callable[[], bool], delai: float = 10.0) -> bool:
