@@ -195,6 +195,18 @@ begin
     Log('Code npsso : suppression impossible (code ' + IntToStr(Code) + ').');
 end;
 
+procedure RetirerDemarrageAvecWindows;
+var
+  Commande: String;
+begin
+  { Valeur « PSN Amis » ajoutée par l'option « Lancer PSN Amis avec Windows » :
+    retirée seulement si elle lance bien ce programme-ci. }
+  if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run',
+                         'PSN Amis', Commande) then
+    if Pos(Lowercase(ExpandConstant('{app}')), Lowercase(Commande)) > 0 then
+      RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'PSN Amis');
+end;
+
 { ─── Choix du niveau de désinstallation ─── }
 
 function Texte(Parent: TSetupForm; Haut: Integer; const Contenu: String): TNewStaticText;
@@ -300,6 +312,8 @@ begin
   { Avant la suppression des fichiers : le programme sert encore à retirer le code. }
   if (CurUninstallStep = usUninstall) and EffacerCode then
     EffacerCodeEnregistre();
+  if CurUninstallStep = usUninstall then
+    RetirerDemarrageAvecWindows();
   if (CurUninstallStep = usPostUninstall) and (Niveau >= 2) then
     EffacerDonnees(EffacerCode);
 end;

@@ -35,6 +35,7 @@ CLE = (
     r"\{8F3B2C7A-5D41-4E9B-9C6E-2A7F1D3B4C59}_is1"
 )
 CIBLE_TEST = "PSN Amis/test-desinstallation"
+RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
 SETUP = RACINE / "dist" / f"PSN-Amis-Setup-{__version__}.exe"
 PROGRAMMES = Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs"
 BUREAU = Path(os.environ["USERPROFILE"]) / "Desktop"
@@ -61,6 +62,15 @@ def entree_registre() -> dict[str, str] | None:
             return valeurs
     except OSError:
         return None
+
+
+def demarrage_present() -> bool:
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN) as cle:
+            winreg.QueryValueEx(cle, "PSN Amis")
+    except OSError:
+        return False
+    return True
 
 
 def installer(dossier: Path | None, journal: Path, *taches: str) -> int:
@@ -115,8 +125,11 @@ def donnees_de_test(dossier: Path) -> None:
 def main() -> int:
     if os.name != "nt" or not SETUP.is_file():
         raise SystemExit(f"Construisez d'abord l'installateur : {SETUP}")
-    if entree_registre() is not None:
-        raise SystemExit("PSN Amis est déjà installé : désinstallez-le avant ce test.")
+    if entree_registre() is not None or demarrage_present():
+        raise SystemExit(
+            "PSN Amis est déjà installé (ou lancé avec Windows) : désinstallez-le "
+            "avant ce test."
+        )
     travail = Path(tempfile.mkdtemp(prefix="psn-amis-installation-"))
     dossier = travail / "Mes Programmes é à ü" / "PSN Amis"
     donnees = travail / "Données de test"
@@ -197,6 +210,11 @@ def main() -> int:
         )
 
         print("4. Désinstallation standard (niveau 1)")
+        # Comme l'option « Lancer PSN Amis avec Windows » de l'application installée.
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, RUN, 0, winreg.KEY_SET_VALUE
+        ) as cle:
+            winreg.SetValueEx(cle, "PSN Amis", 0, winreg.REG_SZ, f'"{exe}" --reduit')
         desinstaller(
             dossier, journaux / "niveau1.log", "/NIVEAU=1", f"/DONNEES={donnees}"
         )
@@ -205,6 +223,7 @@ def main() -> int:
         verifier(not (PROGRAMMES / "PSN Amis").exists(), "raccourcis du menu retirés")
         verifier(not (BUREAU / "PSN Amis.lnk").exists(), "raccourci Bureau retiré")
         verifier((donnees / "reglages.toml").is_file(), "données conservées")
+        verifier(not demarrage_present(), "lancement avec Windows retiré")
 
         print("5. Réinstallation, puis niveau 2 (programme et données)")
         verifier(installer(dossier, journaux / "reinstallation.log") == 0, "réinstallé")
@@ -268,6 +287,15 @@ def main() -> int:
         if entree_registre() is not None and (dossier / "unins000.exe").exists():
             desinstaller(dossier, journaux / "nettoyage.log", "/NIVEAU=1")
         coffre.effacer(CIBLE_TEST)
+        # Valeur de test restée en cas d'échec : retirée si elle vise le dossier de test.
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, RUN, 0, winreg.KEY_ALL_ACCESS
+            ) as cle:
+                if str(travail) in str(winreg.QueryValueEx(cle, "PSN Amis")[0]):
+                    winreg.DeleteValue(cle, "PSN Amis")
+        except OSError:
+            pass
         echecs = [t for ok, t in resultats if not ok]
         if echecs:
             print(f"Journaux d'installation gardés dans {journaux}")
