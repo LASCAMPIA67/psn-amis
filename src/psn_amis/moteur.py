@@ -164,6 +164,15 @@ class SansMessagesEcran(logging.Filter):
         return not getattr(record, "ecran_seulement", False)
 
 
+def preparer_dossier() -> Path:
+    """Crée le dossier des données s'il n'existe pas (premier lancement).
+
+    Appelée avant chaque première écriture (verrou, journal, réglages, amis.json...) :
+    aucune opération ne suppose que le dossier existe déjà.
+    """
+    return chemins.preparer(DOSSIER)
+
+
 def configurer_journal(*, ecran: bool, fichier: bool, diagnostic: bool = False) -> None:
     # En mode détaillé, PSNAWP et requests écrivent les requêtes envoyées, code npsso
     # compris : on les rend complètement muets, ainsi que les avertissements Python.
@@ -197,6 +206,8 @@ def configurer_journal(*, ecran: bool, fichier: bool, diagnostic: bool = False) 
         )
         journal.addHandler(gestionnaire)
 
+    if fichier or diagnostic:
+        preparer_dossier()
     if fichier:
         gestionnaire = logging.handlers.RotatingFileHandler(
             FICHIER_JOURNAL,
@@ -239,7 +250,7 @@ def appliquer_reglages(nouveaux: reglages_module.Reglages) -> None:
 
 def charger_reglages() -> tuple[reglages_module.Reglages, list[str]]:
     """Crée reglages.toml au besoin, le lit et l'applique ; renvoie (réglages, problèmes)."""
-    chemins.preparer(DOSSIER)
+    preparer_dossier()
     reglages_module.creer_si_absent(FICHIER_REGLAGES)
     reglages_module.mettre_a_jour_le_format(FICHIER_REGLAGES)
     charges, problemes = reglages_module.charger(FICHIER_REGLAGES)
@@ -273,6 +284,8 @@ def raison(erreur: PSNAWPError) -> str:
 # ─── Windows : une seule fenêtre à la fois, priorité basse ────────────────────
 def verrouiller_instance() -> IO[str] | None:
     """Empêche de lancer le script deux fois en même temps (requêtes doublées)."""
+    # Premier lancement : le dossier des données n'existe peut-être pas encore.
+    FICHIER_VERROU.parent.mkdir(parents=True, exist_ok=True)
     # Le fichier reste ouvert exprès : c'est lui qui sert de verrou.
     fichier = FICHIER_VERROU.open("a+", encoding="utf-8")
     if os.name == "nt":
@@ -805,6 +818,7 @@ def enregistrer_npsso(saisie: str) -> str:
         # L'ancien fichier, s'il existe, passerait avant le coffre : il est retiré.
         FICHIER_NPSSO.unlink(missing_ok=True)
         return "le coffre de Windows"
+    FICHIER_NPSSO.parent.mkdir(parents=True, exist_ok=True)
     FICHIER_NPSSO.write_text(code + "\n", encoding="utf-8")
     proteger_fichier(FICHIER_NPSSO)
     return "npsso.txt"
@@ -1395,6 +1409,7 @@ def memoriser_amis(compte: str, amis: set[str]) -> None:
         "amis": sorted(amis),
     }
     try:
+        FICHIER_AMIS.parent.mkdir(parents=True, exist_ok=True)
         FICHIER_AMIS.write_text(json.dumps(contenu), encoding="utf-8")
     except OSError as erreur:
         journal.debug("amis.json impossible à écrire : %s", erreur)

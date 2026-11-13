@@ -54,7 +54,29 @@ def main(choix: argparse.Namespace) -> int:
     application.setWindowIcon(icone())
     traduire(application)
 
-    verrou = prendre_le_verrou(choix.relance)
+    # Tout premier lancement : le dossier des données est créé avant toute écriture.
+    try:
+        moteur.preparer_dossier()
+    except OSError as erreur:
+        QMessageBox.critical(
+            None,
+            "PSN Amis",
+            "PSN Amis ne peut pas créer son dossier de données :\n"
+            f"{moteur.DOSSIER}\n\n({erreur.strerror or erreur})\n\n"
+            "Vérifiez que ce dossier n'est pas en lecture seule ou bloqué par un "
+            "antivirus, puis relancez PSN Amis.",
+        )
+        return 1
+    try:
+        verrou = prendre_le_verrou(choix.relance)
+    except OSError as erreur:
+        QMessageBox.critical(
+            None,
+            "PSN Amis",
+            f"PSN Amis ne peut pas écrire dans {moteur.DOSSIER} "
+            f"({erreur.strerror or erreur}).",
+        )
+        return 1
     if verrou is None:
         if choix.verifier is None:
             QMessageBox.information(

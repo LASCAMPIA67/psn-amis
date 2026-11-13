@@ -172,6 +172,9 @@ def main() -> int:
             "APPDATA": str(travail / "appdata"),
             "USERPROFILE": os.environ["USERPROFILE"],
             "QT_QPA_PLATFORM": "offscreen",
+            # Premier lancement : dossier des données absent, comme sur un PC neuf
+            # (démonstration : aucune connexion à Sony).
+            "PSN_AMIS_DONNEES": str(travail / "localappdata" / "PSN Amis"),
         }
         sortie = subprocess.run(  # noqa: S603
             [str(dossier / "PSN Amis console.exe"), "--test", "--demo"],
@@ -193,6 +196,10 @@ def main() -> int:
             check=False,
         )
         verifier(fenetre.returncode == 0, "fenêtre installée : démarrage et fermeture")
+        verifier(
+            (travail / "localappdata" / "PSN Amis" / "psn-amis.donnees").is_file(),
+            "premier lancement : dossier des données créé",
+        )
 
         print("3. Mise à niveau : même dossier, données conservées")
         donnees_de_test(donnees)

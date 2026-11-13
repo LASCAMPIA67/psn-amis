@@ -26,7 +26,14 @@ def dossier() -> Path:
 
 
 def preparer() -> Path:
-    """À appeler avant de charger le moteur : données dans un dossier temporaire."""
+    """À appeler avant de charger le moteur : données dans un dossier temporaire.
+
+    Si PSN_AMIS_DONNEES est déjà défini, ce dossier est utilisé tel quel, sans être
+    créé : c'est ainsi qu'on vérifie un tout premier lancement, sans connexion à Sony.
+    """
+    impose = os.environ.get(chemins.VARIABLE_DONNEES, "").strip()
+    if impose:
+        return Path(impose)
     cible = dossier()
     os.environ[chemins.VARIABLE_DONNEES] = str(cible)
     chemins.preparer(cible)

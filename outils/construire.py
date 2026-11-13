@@ -152,13 +152,20 @@ def pyinstaller() -> None:
 
 
 def verifier_executables(numero: str) -> None:
-    """Le programme compilé doit vraiment démarrer, pas seulement exister."""
-    donnees = Path(tempfile.mkdtemp(prefix="psn-amis-verification-"))
-    environnement = dict(
-        os.environ,
-        PSN_AMIS_DONNEES=str(donnees),
-        PYTHONIOENCODING="utf-8",
-    )
+    """Le programme compilé doit vraiment démarrer, pas seulement exister.
+
+    Chaque lancement part d'un dossier de données qui n'existe pas encore, comme
+    sur un Windows vierge (aucune connexion à Sony : mode démonstration).
+    """
+    travail = Path(tempfile.mkdtemp(prefix="psn-amis-verification-"))
+    environnement = dict(os.environ, PYTHONIOENCODING="utf-8")
+    environnement.pop("PSN_AMIS_DONNEES", None)
+
+    def premier_lancement(nom: str) -> Path:
+        donnees = travail / nom / "AppData Local é" / "PSN Amis"
+        environnement["PSN_AMIS_DONNEES"] = str(donnees)
+        return donnees
+
     # Pas d'écran dans l'intégration continue : rendu hors écran.
     if os.environ.get("CI"):
         environnement["QT_QPA_PLATFORM"] = "offscreen"
@@ -173,6 +180,7 @@ def verifier_executables(numero: str) -> None:
         )
         if sortie.returncode or f"PSN Amis {numero}" not in sortie.stdout:
             raise SystemExit(f"« PSN Amis console.exe --version » : {sortie.stdout!r}")
+        donnees = premier_lancement("console")
         sortie = executer(
             [str(console), "--test", "--demo"],
             capture_output=True,
@@ -182,6 +190,9 @@ def verifier_executables(numero: str) -> None:
         )
         if sortie.returncode or "aucune demande n'a été acceptée" not in sortie.stdout:
             raise SystemExit(f"Mode console en démonstration : {sortie.stdout!r}")
+        if not (donnees / "reglages.toml").is_file():
+            raise SystemExit("Console : dossier des données non créé.")
+        donnees = premier_lancement("fenetre")
         fenetre = executer(
             [str(APPLICATION / "PSN Amis.exe"), "--demo", "--verifier", "8"],
             env=environnement,
@@ -189,15 +200,20 @@ def verifier_executables(numero: str) -> None:
         )
         if fenetre.returncode:
             raise SystemExit(f"La fenêtre ne démarre pas (code {fenetre.returncode}).")
-        journal = Path(tempfile.gettempdir()) / "psn-amis-demo" / "journal.txt"
+        journal = donnees / "journal.txt"
         texte = journal.read_text(encoding="utf-8") if journal.exists() else ""
         if "Connecté au compte PSN MonCompte-PSN" not in texte:
             raise SystemExit(
                 "La fenêtre a démarré mais le moteur ne s'est pas connecté."
             )
+        if (donnees / "psn-amis.lock").exists():
+            raise SystemExit("Fenêtre : verrou non libéré à la fermeture.")
     finally:
-        shutil.rmtree(donnees, ignore_errors=True)
-    print("✔ Exécutables vérifiés : fenêtre et console démarrent (démonstration).")
+        shutil.rmtree(travail, ignore_errors=True)
+    print(
+        "✔ Exécutables vérifiés : fenêtre et console démarrent au tout premier "
+        "lancement (dossier de données absent, démonstration)."
+    )
 
 
 def iscc() -> Path:
@@ -239,7 +255,8 @@ def empreintes(fichiers: list[Path]) -> Path:
         calcul = hashlib.sha256(fichier.read_bytes()).hexdigest()
         lignes.append(f"{calcul}  {fichier.name}")
     chemin = DISTRIBUTION / "SHA256SUMS.txt"
-    chemin.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+    # Fins de ligne Unix : « sha256sum --check » (Linux, publication) refuse les CRLF.
+    chemin.write_bytes(("\n".join(lignes) + "\n").encode("utf-8"))
     return chemin
 
 

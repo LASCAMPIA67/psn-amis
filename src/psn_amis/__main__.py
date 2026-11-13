@@ -7,6 +7,7 @@ Sans option, la fenêtre de l'application s'ouvre. Les options --console, --test
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -105,12 +106,59 @@ def main(arguments: list[str] | None = None) -> int:
         from psn_amis import app
     except ImportError as erreur:
         # Bibliothèque Qt absente (installation partielle) : la console reste possible.
-        print(
-            f"Interface graphique indisponible ({erreur}). "
-            "Lancez « python -m psn_amis --console »."
-        )
+        signaler_plantage(erreur, "Interface graphique indisponible")
         return 1
-    return app.main(choix)
+    try:
+        return app.main(choix)
+    except Exception as erreur:  # noqa: BLE001 (dernier filet : message lisible)
+        signaler_plantage(erreur, "PSN Amis s'est arrêté à cause d'une erreur imprévue")
+        return 1
+
+
+def _masqueur():
+    """La fonction qui masque le code npsso ; si le moteur ne se charge pas, une
+    fonction qui ne garde que le nom de l'erreur (rien de sensible ne sort)."""
+    try:
+        from psn_amis.moteur import masquer
+    except Exception:  # noqa: BLE001 (le moteur lui-même peut être en cause)
+        return None
+    return masquer
+
+
+def signaler_plantage(erreur: BaseException, titre: str) -> Path | None:
+    """Écrit le détail (code npsso masqué) dans un fichier et prévient l'utilisateur.
+
+    L'application installée n'a pas de console : sans cela, Windows afficherait une
+    trace technique brute.
+    """
+    import tempfile
+    import traceback
+
+    masquer = _masqueur()
+    if masquer is None:
+        detail = f"{type(erreur).__name__} (détail indisponible)"
+        resume = type(erreur).__name__
+    else:
+        detail = masquer("".join(traceback.format_exception(erreur)))
+        resume = masquer(f"{type(erreur).__name__} : {erreur}")
+    rapport: Path | None = Path(tempfile.gettempdir()) / "psn-amis-erreur.txt"
+    try:
+        rapport.write_text(f"PSN Amis {__version__}\n\n{detail}", encoding="utf-8")
+    except OSError:
+        rapport = None
+    texte = (
+        f"{titre} :\n{resume}\n\n"
+        + (f"Détails enregistrés dans :\n{rapport}\n\n" if rapport else "")
+        + "Joignez ce fichier à un signalement sur la page GitHub du projet "
+        "(relisez-le avant : il ne contient pas votre code npsso)."
+    )
+    if sys.stderr is not None:
+        print(texte, file=sys.stderr)
+    if os.name == "nt" and not os.environ.get("PSN_AMIS_SANS_FENETRE"):
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, texte, "PSN Amis", 0x10)
+    return rapport
 
 
 if __name__ == "__main__":
