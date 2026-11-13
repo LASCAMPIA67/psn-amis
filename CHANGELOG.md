@@ -6,6 +6,36 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), et le p
 
 ## [Non publié]
 
+## [2.5.0] - 2026-11-13
+
+### Ajouté
+
+- **Réglages dans `reglages.toml`**, créé au premier lancement à partir de `reglages.exemple.toml`, qui explique chaque réglage. Un réglage mal écrit est signalé dans l'activité, et sa valeur par défaut est utilisée.
+- **Code npsso dans le coffre de Windows** (Gestionnaire d'identification), chiffré avec la session Windows. Un `npsso.txt` existant y est rangé au démarrage, puis supprimé une fois le code relu sans erreur. Réglage `coffre_windows = false` pour garder le fichier.
+- **Pause minutée** : touches <kbd>1</kbd>, <kbd>2</kbd> et <kbd>3</kbd> pour 5, 10 ou 30 minutes, avec le compte à rebours de la reprise dans le statut.
+- **Pause automatique** après un nombre d'ajouts choisi (`pause_apres_ajouts`).
+- **Demandes en attente** pendant la pause : pseudo de chacun et depuis quand il attend.
+- **Liste noire et liste blanche** de pseudos (`liste_noire`, `liste_blanche`) ; chaque demande ignorée est signalée une fois.
+- **Amis retirés pendant l'arrêt** : la liste d'amis est gardée dans `amis.json`, et comparée au démarrage suivant.
+- **Bulles de notification Windows** pour le code à renouveler, la liste pleine et les longues coupures (`notifications`).
+- **Bip à chaque ajout** : touche <kbd>S</kbd>, réglage `son`, symbole ♪ dans l'en-tête.
+- **Aide** (touche <kbd>H</kbd>) : touches, symboles, et bilan des 7 derniers jours tiré du journal.
+- **Défilement de l'activité** avec les flèches, <kbd>Pg.préc.</kbd>, <kbd>Pg.suiv.</kbd> et <kbd>Origine</kbd> ; l'affichage ne bouge pas quand un nouveau message arrive.
+- **Histogramme des 24 dernières heures** en haut de « Derniers ajouts ».
+- Les **retraits du jour** dans la carte « Aujourd'hui », le **rythme par heure** dans « Depuis le lancement », et le temps écoulé depuis le dernier ajout dans le statut.
+- **Trois thèmes** de couleurs : sombre, doux et daltonien (`theme`).
+- **Raccourcis Windows** : `Raccourcis PSN Amis.cmd` ajoute PSN Amis au Bureau, avec sa nouvelle icône, et au démarrage de Windows (fenêtre réduite), ou retire ces raccourcis.
+- **Export du journal en CSV** pour Excel ou LibreOffice : `outils/exporter_journal.py`.
+- **Vérification de nouvelle version** sur GitHub au démarrage, coupée au départ (`verifier_mises_a_jour`).
+- **Option `--diagnostic`** : écrit aussi `diagnostic.txt`, avec les détails techniques des erreurs (code npsso toujours masqué).
+- La présentation en anglais : `README.en.md`.
+
+### Modifié
+
+- Les ajouts et retraits des dernières 24 heures sont relus dans le journal au démarrage (et plus seulement ceux du jour).
+- Les touches du bas de l'écran raccourcissent leurs libellés pour laisser la place à un message, au lieu de le couper.
+- Les pseudos des demandeurs sont gardés en mémoire d'une vérification à l'autre : moins de requêtes à Sony.
+
 ## [2.4.1] - 2026-11-12
 
 ### Corrigé
@@ -99,7 +129,8 @@ Première version publiée sur GitHub. Le compte connecté est celui dont vient 
 - Liste d'amis pleine : signalée clairement, reprise automatique dès qu'une place se libère. Le script ne retire jamais d'amis.
 - Une seule instance à la fois, grâce à un fichier verrou.
 
-[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.1...HEAD
+[Non publié]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/LASCAMPIA67/psn-amis/compare/v2.3.0...v2.3.1
