@@ -99,11 +99,9 @@ def test_partage_du_vrai_nom_jamais_accepte(moteur_en_marche, faux_sony):
     suivi, _commandes, _fil = moteur_en_marche
     assert attendre_que(lambda: suivi.instantane().statut == moteur.Statut.EN_MARCHE)
     faux_sony.partages.append("ami3")
-    assert attendre_que(
-        lambda: any("partager vos vrais noms" in t for t in textes(suivi))
-    )
+    assert attendre_que(lambda: any("demande d'ami proche" in t for t in textes(suivi)))
     time.sleep(2.5)
-    assert sum("partager vos vrais noms" in t for t in textes(suivi)) == 1
+    assert sum("demande d'ami proche" in t for t in textes(suivi)) == 1
     assert "ami3" not in faux_sony.acceptes
     assert not any("refusée" in t for t in textes(suivi))
     assert suivi.instantane().demandes_en_attente == 0

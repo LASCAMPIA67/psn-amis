@@ -1139,8 +1139,9 @@ def signaler_partages(connexion: Connexion, etat: Etat, partages: list[str]) -> 
             continue
         etat.partages_signales.add(compte)
         journal.info(
-            "%s (déjà votre ami) demande à partager vos vrais noms : le script n'y "
-            "touche pas. Répondez vous-même sur la console si vous le souhaitez.",
+            "%s (déjà votre ami) envoie une demande d'ami proche (partage des vrais "
+            "noms) : PSN Amis n'y touche pas. Répondez-y vous-même sur la console "
+            "ou l'appli PlayStation si vous le souhaitez.",
             joueur(connexion, etat, compte).online_id,
         )
 

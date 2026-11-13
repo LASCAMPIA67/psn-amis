@@ -41,7 +41,7 @@ def est_compile() -> bool:
 def dossier_paquet() -> Path:
     """Le dossier du code (ressources comprises), compilé ou non."""
     if est_compile():
-        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "psn_amis"
     return Path(__file__).resolve().parent
 
 
